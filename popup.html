@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>July Meeting Bot</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-logo" aria-hidden="true">
+          <img src="icons/icon48.png" alt="" class="brand-img" width="30" height="30">
+        </div>
+        <div class="brand-info">
+          <h1 class="brand-name">July Meeting Bot</h1>
+          <p id="today" class="dateline"></p>
+        </div>
+      </div>
+      <span id="conn-badge" class="badge">…</span>
+    </header>
+
+    <main class="app-main">
+      <!-- 01 Meeting Room (Hero Card) -->
+      <section class="card hero-card" aria-labelledby="tab-title">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/>
+              <rect x="2" y="6" width="14" height="12" rx="3"/>
+            </svg>
+            <h2 id="tab-title" class="card-title">Phòng họp</h2>
+          </div>
+          <button id="refresh" class="icon-btn" type="button" title="Làm mới trạng thái" aria-label="Làm mới">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 16h5v5"/>
+            </svg>
+          </button>
+        </div>
+        <div class="meeting-box">
+          <div class="meeting-status-row">
+            <span id="state-dot" class="dot" aria-hidden="true"></span>
+            <div class="meeting-details">
+              <p id="state" class="meeting-state-text" role="status" aria-live="polite">Đang kiểm tra…</p>
+              <p id="room" class="room-chip mono"></p>
+            </div>
+          </div>
+          <p id="bot" class="pill" hidden></p>
+        </div>
+      </section>
+
+      <!-- 02 Account Card -->
+      <section class="card" aria-labelledby="conn-title">
+        <div class="card-header">
+          <div class="card-title-group">
+            <svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            <h2 id="conn-title" class="card-title">Tài khoản</h2>
+          </div>
+        </div>
+
+        <div id="conn-off" class="account-off">
+          <p class="section-desc">Kết nối Google để bot tự động tham gia các cuộc họp trong lịch biểu.</p>
+          <button id="connect" class="btn btn-google" type="button">
+            <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24Z"/>
+              <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15Z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"/>
+            </svg>
+            <span>Kết nối Google</span>
+          </button>
+        </div>
+
+        <div id="conn-on" class="account-on" hidden>
+          <div class="user-profile">
+            <span id="avatar" class="avatar" aria-hidden="true"></span>
+            <div class="who">
+              <span id="conn-email" class="email"></span>
+              <span class="user-meta">Đang theo dõi lịch họp</span>
+            </div>
+          </div>
+          <button id="disconnect" class="btn-disconnect" type="button">Ngắt kết nối</button>
+        </div>
+
+        <p id="conn-state" class="sr-only" role="status" aria-live="polite"></p>
+        <p id="conn-error" class="error-banner" role="alert"></p>
+      </section>
+
+      <!-- 03 Advanced Settings Collapsible Card -->
+      <details class="card advanced-card" id="advanced-settings">
+        <summary class="advanced-summary">
+          <div class="card-title-group">
+            <svg class="card-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
+            <h2 class="card-title">Cài đặt nâng cao</h2>
+          </div>
+          <svg class="chevron-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </summary>
+
+        <div class="advanced-content">
+          <!-- Backend URL -->
+          <div class="advanced-field">
+            <label class="field-label" for="backend-url">Địa chỉ backend</label>
+            <input id="backend-url" class="input-text" type="url" placeholder="http://localhost:4000" spellcheck="false">
+          </div>
+
+          <div class="advanced-divider" aria-hidden="true"></div>
+
+          <!-- Schedule Form -->
+          <form id="schedule" class="schedule-form" aria-labelledby="schedule-title">
+            <div class="schedule-header">
+              <div class="card-title-group">
+                <svg class="card-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <h3 id="schedule-title" class="subcard-title">Lịch quét tự động</h3>
+              </div>
+              <span class="cadence-tag">Mỗi 10 phút</span>
+            </div>
+
+            <div class="times-grid">
+              <div class="time-field">
+                <label class="field-label" for="start">Bắt đầu</label>
+                <input id="start" class="time-input" name="start" type="time" required>
+              </div>
+              <span class="time-separator" aria-hidden="true">→</span>
+              <div class="time-field">
+                <label class="field-label" for="end">Kết thúc</label>
+                <input id="end" class="time-input" name="end" type="time" required>
+              </div>
+            </div>
+
+            <div class="days-container">
+              <p class="field-label" aria-hidden="true">Ngày trong tuần</p>
+              <fieldset id="days" class="days-group">
+                <legend class="sr-only">Ngày trong tuần</legend>
+              </fieldset>
+            </div>
+
+            <div class="card-footer">
+              <span id="schedule-status" class="schedule-status" role="status" aria-live="polite"></span>
+              <button class="btn btn-save" type="submit">
+                <span>Lưu thay đổi</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </details>
+    </main>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
