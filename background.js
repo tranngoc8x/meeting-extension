@@ -14,7 +14,7 @@ ready.catch(() => {});
 async function requestBot(tabId, event) {
   let status;
   try {
-    status = (await api(chrome.storage.local, 'POST', '/api/in-call', { meetingUrl: event.meetingUrl })).status;
+    status = (await api(chrome.storage.local, 'POST', '/integrations/v1/in-call', { meetingUrl: event.meetingUrl })).status;
   } catch (error) {
     status = `error: ${error.message}`;
   }
