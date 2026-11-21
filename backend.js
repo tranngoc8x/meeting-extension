@@ -1,12 +1,24 @@
 // Connection to meeting-scheduler. The API token lives in chrome.storage.local, which
 // background.js restricts to trusted extension contexts (content scripts cannot read it).
 export const CONNECTION_KEY = 'backendConnection';
-export const DEFAULT_BACKEND_URL = 'http://localhost:4000';
+export const DEFAULT_BACKEND_URL = 'https://api.july.io.vn';
 export const backendStatusKey = tabId => `meet-backend:${tabId}`;
 
 export async function getConnection(storage) {
   const saved = (await storage.get(CONNECTION_KEY))[CONNECTION_KEY] ?? {};
   return { backendUrl: saved.backendUrl || DEFAULT_BACKEND_URL, token: saved.token ?? null, email: saved.email ?? null };
+}
+
+// Builds before 0.2.0 defaulted to a local backend; that saved value would keep
+// pointing the installed extension at localhost after the switch to the server.
+const LEGACY_LOCAL_BACKENDS = ['http://localhost:4000', 'http://127.0.0.1:4000'];
+
+/** Move a saved legacy local backend to the server; its token belongs to the old backend. */
+export async function migrateLegacyBackend(storage) {
+  const saved = (await storage.get(CONNECTION_KEY))[CONNECTION_KEY];
+  if (!saved || !LEGACY_LOCAL_BACKENDS.includes(saved.backendUrl)) return false;
+  await storage.set({ [CONNECTION_KEY]: { backendUrl: DEFAULT_BACKEND_URL } });
+  return true;
 }
 
 export function normalizeBackendUrl(value) {

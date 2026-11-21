@@ -2,7 +2,7 @@
 
 Manifest V3 extension, no build step. Works with [meeting-scheduler](../meeting-scheduler):
 
-- **Kết nối Google:** popup → nhập địa chỉ backend (mặc định `http://localhost:4000`) → _Kết nối Google_. The service worker runs `chrome.identity.launchWebAuthFlow` against the backend's `/oauth/start`; the backend returns an API token in the redirect fragment, stored in `chrome.storage.local` (trusted contexts only, content scripts cannot read it).
+- **Kết nối Google:** popup → nhập địa chỉ backend (mặc định `https://api.july.io.vn`; khi dev đổi thành `http://localhost:4000`) → _Kết nối Google_. The service worker runs `chrome.identity.launchWebAuthFlow` against the backend's `/oauth/start`; the backend returns an API token in the redirect fragment, stored in `chrome.storage.local` (trusted contexts only, content scripts cannot read it).
 - **Kết nối bằng tài khoản dashboard:** khi đã đăng nhập dashboard, nút _Kết nối bằng tài khoản dashboard_ chạy `launchWebAuthFlow` tới `/dashboard/v2/extension/authorize`; dashboard hỏi xác nhận rồi trả về cùng fragment `#token=…&email=…` (hoặc `#error=…`) như luồng Google, xử lý chung trong `connect()`.
 - **Mở dashboard:** khi đã kết nối, nút _Mở dashboard_ gọi `POST /dashboard/v2/auth/extension-code` (Bearer token) lấy link dùng một lần rồi mở tab mới (`chrome.tabs.create`, không cần permission `tabs`). Link chỉ được mở nếu là đường dẫn trên chính backend. 401 = token hết hạn: tiện ích tự ngắt kết nối.
 - **Lịch quét họp:** start/end time and weekdays (default 08:30-18:30, Mon-Fri), saved in `chrome.storage.sync` (`scanSchedule`) and pushed to the backend (`PUT /api/settings`) when connected.

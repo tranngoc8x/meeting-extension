@@ -9,7 +9,7 @@ test('backend URL is validated, defaults to localhost, and changing it drops the
  assert.equal(normalizeBackendUrl(' https://bot.urbox.dev/ '), 'https://bot.urbox.dev');
  for (const bad of ['ftp://x', 'not a url', 'https://u:p@x', 'https://x/?q=1']) assert.throws(() => normalizeBackendUrl(bad));
  const s = storage();
- assert.equal((await getConnection(s)).backendUrl, 'http://localhost:4000');
+ assert.equal((await getConnection(s)).backendUrl, 'https://api.july.io.vn');
  s.data.backendConnection = { backendUrl: 'http://localhost:4000', token: 't', email: 'e' };
  await setBackendUrl(s, 'http://localhost:4000/');
  assert.equal((await getConnection(s)).token, 't');
@@ -21,12 +21,12 @@ test('connect reads token/email from the redirect fragment, or surfaces the erro
  const identity = fragment => ({
   getRedirectURL: () => 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/',
   launchWebAuthFlow: async ({ url }) => {
-   assert.equal(url, 'http://localhost:4000/oauth/start?redirect_uri=https%3A%2F%2Fabcdefghijklmnopabcdefghijklmnop.chromiumapp.org%2F');
+   assert.equal(url, 'https://api.july.io.vn/oauth/start?redirect_uri=https%3A%2F%2Fabcdefghijklmnopabcdefghijklmnop.chromiumapp.org%2F');
    return `https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/#${fragment}`;
   },
  });
  await assert.rejects(connect(s, identity('error=access_denied')), /access_denied/);
- assert.deepEqual(await connect(s, identity('token=abc&email=a%40example.com')), { backendUrl: 'http://localhost:4000', token: 'abc', email: 'a@example.com' });
+ assert.deepEqual(await connect(s, identity('token=abc&email=a%40example.com')), { backendUrl: 'https://api.july.io.vn', token: 'abc', email: 'a@example.com' });
 });
 test('api sends the bearer token; a 401 disconnects', async () => {
  const s = storage();
@@ -42,7 +42,7 @@ test('connect via dashboard authorize builds the URL, stores the token, surfaces
  const identity = fragment => ({
   getRedirectURL: () => redirect,
   launchWebAuthFlow: async ({ url, interactive }) => {
-   assert.equal(url, `http://localhost:4000/dashboard/v2/extension/authorize?redirect_uri=${encodeURIComponent(redirect)}`);
+   assert.equal(url, `https://api.july.io.vn/dashboard/v2/extension/authorize?redirect_uri=${encodeURIComponent(redirect)}`);
    assert.equal(interactive, true);
    return `${redirect}#${fragment}`;
   },
@@ -50,7 +50,7 @@ test('connect via dashboard authorize builds the URL, stores the token, surfaces
  await assert.rejects(connect(s, identity('error=access_denied'), DASHBOARD_AUTHORIZE_PATH), /access_denied/);
  assert.equal((await getConnection(s)).token, null);
  await connect(s, identity('token=dash&email=d%40example.com'), DASHBOARD_AUTHORIZE_PATH);
- assert.deepEqual(s.data.backendConnection, { backendUrl: 'http://localhost:4000', token: 'dash', email: 'd@example.com' });
+ assert.deepEqual(s.data.backendConnection, { backendUrl: 'https://api.july.io.vn', token: 'dash', email: 'd@example.com' });
 });
 test('openDashboard exchanges the token for a one-time link and opens it; 401 disconnects', async () => {
  const s = storage();
@@ -74,4 +74,16 @@ test('openDashboard exchanges the token for a one-time link and opens it; 401 di
  await assert.rejects(openDashboard(s, tabs, async () => new Response('{}', { status: 401 })), /Phiên tiện ích hết hạn, hãy kết nối lại/);
  assert.equal((await getConnection(s)).token, null);
  assert.equal(opened.length, 1);
+});
+
+test('legacy localhost backend migrates to the server and drops its token', async () => {
+  const { migrateLegacyBackend, DEFAULT_BACKEND_URL } = await import('../backend.js');
+  const store = data => ({ data, async get(k) { return { [k]: this.data[k] }; }, async set(v) { Object.assign(this.data, v); } });
+  const legacy = store({ backendConnection: { backendUrl: 'http://localhost:4000', token: 'old', email: 'e' } });
+  assert.equal(await migrateLegacyBackend(legacy), true);
+  assert.deepEqual(legacy.data.backendConnection, { backendUrl: DEFAULT_BACKEND_URL });
+  const custom = store({ backendConnection: { backendUrl: 'https://staging.example.invalid', token: 't' } });
+  assert.equal(await migrateLegacyBackend(custom), false);
+  assert.equal(custom.data.backendConnection.token, 't');
+  assert.equal(await migrateLegacyBackend(store({})), false);
 });

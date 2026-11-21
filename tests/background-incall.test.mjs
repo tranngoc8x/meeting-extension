@@ -7,7 +7,7 @@ test('meeting transition sends integrations notification with saved user token',
  const storage={get:async key=>({[key]:values[key]}),set:async v=>Object.assign(values,v),setAccessLevel:async()=>{},remove:async()=>{}};
  const previousChrome=globalThis.chrome,previousFetch=globalThis.fetch;
  t.after(()=>{globalThis.chrome=previousChrome;globalThis.fetch=previousFetch;});
- globalThis.chrome={storage:{local:storage},runtime:{id:'fixture',getURL:p=>'chrome-extension://fixture/'+p,onMessage:{addListener:f=>listeners.push(f)},onStartup:{addListener:()=>{}}},tabs:{onRemoved:{addListener:()=>{}}}};
+ globalThis.chrome={storage:{local:storage},runtime:{id:'fixture',getURL:p=>'chrome-extension://fixture/'+p,onMessage:{addListener:f=>listeners.push(f)},onStartup:{addListener:()=>{}},onInstalled:{addListener:()=>{}}},tabs:{onRemoved:{addListener:()=>{}}}};
  let complete;
  const sent=new Promise(resolve=>{complete=resolve;});
  globalThis.fetch=async (url,init)=>{complete({url,init});return new Response('{"status":"dispatched"}',{status:200});};

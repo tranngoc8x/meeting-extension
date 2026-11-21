@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5URJK4nHC9yiMYfHTd/9UThSdXl1IQ5G7ts6o6SURL36g40aXajjm7NkAauYeWp40OC3LbvXXcunTYmM/ZJ8HFo7bQMMtOcxPNUymLUPksV1g9B70WviyrN8ElzCzqgpc3zpGb5MBp90Y1HFwqpsd+uweGVaDzEoN5B/ClMcgKVgPjmcNUFGXhJf612LYE/hCFzA/Yt1ktMC1sk5P6h1VzoVrCLM1CSh/5DdMMpRDPJ1wo7X/YF2wqOxe+X0wN1XnbfitIsf+96V7Tj2TX2TPrDlLSkLbcZJJREZCXZMbwheWpmgGJUo8SOKVTJDOiijwu7gWT4zuvGsfmWb0G0e9QIDAQAB",
   "name": "July Meeting Bot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sends the July meeting bot to your Google Meet calls (calendar + in-call detection).",
   "minimum_chrome_version": "111",
   "permissions": [

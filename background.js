@@ -1,5 +1,5 @@
 import { recordTransition, tabKey } from './events.js';
-import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect } from './backend.js';
+import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect, migrateLegacyBackend } from './backend.js';
 import { loadSchedule } from './schedule.js';
 // Serialize storage read/modify/write.
 let queue = Promise.resolve();
@@ -10,6 +10,8 @@ function enqueue(operation) {
 }
 const ready = chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 ready.catch(() => {});
+// Updating from a localhost-default build: point the extension at the server.
+chrome.runtime.onInstalled.addListener(() => { enqueue(() => migrateLegacyBackend(chrome.storage.local)).catch(() => {}); });
 /** A new in-call transition: ask the backend for a bot. It deduplicates rooms that already have one. */
 async function requestBot(tabId, event) {
   let status;
