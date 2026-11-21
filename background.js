@@ -1,5 +1,5 @@
 import { recordTransition, tabKey } from './events.js';
-import { api, backendStatusKey, connect, disconnect } from './backend.js';
+import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect } from './backend.js';
 import { loadSchedule } from './schedule.js';
 // Serialize storage read/modify/write.
 let queue = Promise.resolve();
@@ -24,7 +24,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Extension pages only (popup), never content scripts running on Meet.
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(''))) return;
   if (message?.type === 'backend.connect') {
-    connect(chrome.storage.local, chrome.identity)
+    connect(chrome.storage.local, chrome.identity, message.via === 'dashboard' ? DASHBOARD_AUTHORIZE_PATH : undefined)
       .then(async connection => {
         // Push the locally chosen scan schedule so the backend uses it from the first scan.
         await api(chrome.storage.local, 'PUT', '/api/settings', await loadSchedule(chrome.storage.sync)).catch(() => {});

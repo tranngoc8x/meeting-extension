@@ -26,10 +26,16 @@ export async function setBackendUrl(storage, value) {
   return backendUrl;
 }
 
-/** Google sign-in through the backend; it redirects back with #token=…&email=… or #error=…. */
-export async function connect(storage, identity) {
+export const GOOGLE_START_PATH = '/oauth/start';
+export const DASHBOARD_AUTHORIZE_PATH = '/dashboard/v2/extension/authorize';
+
+/**
+ * Sign-in through the backend: Google (/oauth/start) or an existing dashboard session
+ * (/dashboard/v2/extension/authorize). Both redirect back with #token=…&email=… or #error=….
+ */
+export async function connect(storage, identity, startPath = GOOGLE_START_PATH) {
   const { backendUrl } = await getConnection(storage);
-  const start = `${backendUrl}/oauth/start?redirect_uri=${encodeURIComponent(identity.getRedirectURL())}`;
+  const start = `${backendUrl}${startPath}?redirect_uri=${encodeURIComponent(identity.getRedirectURL())}`;
   const result = new URL(await identity.launchWebAuthFlow({ url: start, interactive: true }));
   const fragment = new URLSearchParams(result.hash.slice(1));
   if (!fragment.get('token')) throw new Error(fragment.get('error') || 'Đăng nhập không thành công');
@@ -54,8 +60,18 @@ export async function api(storage, method, path, body, fetchImpl = fetch) {
   const json = await response.json().catch(() => ({}));
   if (response.status === 401) {
     await disconnect(storage);
-    throw new Error('Phiên kết nối hết hạn, hãy kết nối lại');
+    throw new Error('Phiên tiện ích hết hạn, hãy kết nối lại');
   }
   if (!response.ok) throw new Error(json.error || `Backend lỗi ${response.status}`);
   return json;
+}
+
+/** Exchange the extension token for a one-time dashboard link and open it (popup, trusted context). */
+export async function openDashboard(storage, tabs, fetchImpl = fetch) {
+  const { backendUrl } = await getConnection(storage);
+  const { url } = await api(storage, 'POST', '/dashboard/v2/auth/extension-code', {}, fetchImpl);
+  // `url` must stay a path on the backend: reject `//host`, `@host` and absolute URLs.
+  const target = typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') ? new URL(backendUrl + url) : null;
+  if (!target || target.origin !== new URL(backendUrl).origin) throw new Error('Backend trả về liên kết dashboard không hợp lệ');
+  await tabs.create({ url: target.href });
 }

@@ -13,6 +13,8 @@ test('popup.html contains all required functional DOM IDs for popup.js', () => {
     'today',
     'conn-off',
     'connect',
+    'connect-dashboard',
+    'open-dashboard',
     'backend-url',
     'conn-on',
     'avatar',

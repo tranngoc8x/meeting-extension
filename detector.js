@@ -1,7 +1,10 @@
 // Classic script: MV3 declarative content scripts do not support static imports.
 // This namespace lives in the extension's isolated world, never the Meet page world.
 (() => {
-  const ROOT = 'main,[role="main"]';
+  // Meet renders the control bar (with Leave call) as a sibling of [role=main], not inside it,
+  // so watch the whole body. ponytail: body-wide subtree observer; the record filter below
+  // keeps it to control changes. Narrow to the call container if it ever shows up in profiles.
+  const ROOT = 'body';
   const BUTTON = 'button,[role="button"]';
   const RELEVANT = `${ROOT},${BUTTON},[role="toolbar"]`;
   function normalizeUrl(value) {

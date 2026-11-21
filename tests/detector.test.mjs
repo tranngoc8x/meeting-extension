@@ -71,3 +71,14 @@ test('URL normalization rejects arbitrary hosts and room paths', async t => {
   const p = await fixture(t,'<main></main>');
   assert.deepEqual(await p.evaluate(() => ['https://meet.google.com/abc-defg-hij?x=1#x','https://evil.test/abc-defg-hij','https://meet.google.com/lookup/name','http://meet.google.com/abc-defg-hij'].map(MeetDetector.normalizeUrl)), ['https://meet.google.com/abc-defg-hij',null,null,null]);
 });
+test('real Meet layout: leave button sits outside <main>', async t => {
+  // Shape seen on meet.google.com (14/11/2026): the control bar is a sibling of [role=main].
+  const p = await fixture(t, '<div id="app"><main><p>tiles</p></main></div>');
+  await p.evaluate(() => document.querySelector('#app').insertAdjacentHTML('beforeend',
+    '<div role="toolbar"><button aria-label="Leave call"><i class="quRWN-Bz112c google-symbols notranslate" aria-hidden="true">call_end</i></button></div>'));
+  await settle(p);
+  assert.deepEqual(await p.evaluate(() => events.map(e => e.inCall)), [true]);
+  await p.evaluate(() => document.querySelector('[role=toolbar]').remove());
+  await settle(p);
+  assert.deepEqual(await p.evaluate(() => events.map(e => e.inCall)), [true, false]);
+});

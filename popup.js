@@ -1,10 +1,10 @@
 import { WEEKDAYS, loadSchedule, saveSchedule } from './schedule.js';
-import { DEFAULT_BACKEND_URL, api, backendStatusKey, getConnection, setBackendUrl } from './backend.js';
+import { DEFAULT_BACKEND_URL, api, backendStatusKey, getConnection, openDashboard, setBackendUrl } from './backend.js';
 
 const $ = selector => document.querySelector(selector);
 const local = chrome.storage.local;
 
-// Backend /api/in-call results → label + tone.
+// Backend /integrations/in-call results → label + tone.
 const BOT_STATUS = {
   dispatched: ['Đã gửi bot vào phòng', 'ok'],
   queued: ['Bot đang bận, đã xếp hàng', 'warn'],
@@ -27,20 +27,27 @@ async function renderConnection() {
   $('#conn-state').textContent = connected ? `Đã kết nối: ${email}` : 'Chưa kết nối backend';
   return connected;
 }
-$('#connect').addEventListener('click', async () => {
+async function connectVia(button, via) {
   $('#conn-error').textContent = '';
-  $('#connect').disabled = true;
+  button.disabled = true;
   try {
     await setBackendUrl(local, $('#backend-url').value || DEFAULT_BACKEND_URL);
     // The sign-in window steals focus and closes this popup; the service worker finishes the flow.
-    const result = await chrome.runtime.sendMessage({ type: 'backend.connect' });
+    const result = await chrome.runtime.sendMessage({ type: 'backend.connect', via });
     if (!result?.ok) throw new Error(result?.error || 'Kết nối thất bại');
   } catch (error) {
     $('#conn-error').textContent = error.message;
   } finally {
-    $('#connect').disabled = false;
+    button.disabled = false;
   }
   if (await renderConnection()) await loadServerSchedule();
+}
+$('#connect').addEventListener('click', () => connectVia($('#connect'), 'google'));
+$('#connect-dashboard').addEventListener('click', () => connectVia($('#connect-dashboard'), 'dashboard'));
+$('#open-dashboard').addEventListener('click', async () => {
+  $('#conn-error').textContent = '';
+  try { await openDashboard(local, chrome.tabs); }
+  catch (error) { $('#conn-error').textContent = error.message; await renderConnection(); }
 });
 $('#disconnect').addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'backend.disconnect' });
