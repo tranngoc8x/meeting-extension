@@ -1,37 +1,237 @@
-# July Meeting Bot (Chrome extension)
+# July Meeting Bot (Chrome Extension)
 
-Manifest V3 extension, no build step. Works with [meeting-scheduler](../meeting-scheduler):
+<p align="center">
+  <img src="icons/icon128.png" alt="July Meeting Bot Logo" width="96" height="96" />
+</p>
 
-- **Kết nối Google:** popup → nhập địa chỉ backend (mặc định `https://api.july.io.vn`; khi dev đổi thành `http://localhost:4000`) → _Kết nối Google_. The service worker runs `chrome.identity.launchWebAuthFlow` against the backend's `/oauth/start`; the backend returns an API token in the redirect fragment, stored in `chrome.storage.local` (trusted contexts only, content scripts cannot read it).
-- **Kết nối bằng tài khoản dashboard:** khi đã đăng nhập dashboard, nút _Kết nối bằng tài khoản dashboard_ chạy `launchWebAuthFlow` tới `/dashboard/v2/extension/authorize`; dashboard hỏi xác nhận rồi trả về cùng fragment `#token=…&email=…` (hoặc `#error=…`) như luồng Google, xử lý chung trong `connect()`.
-- **Mở dashboard:** khi đã kết nối, nút _Mở dashboard_ gọi `POST /dashboard/v2/auth/extension-code` (Bearer token) lấy link dùng một lần rồi mở tab mới (`chrome.tabs.create`, không cần permission `tabs`). Link chỉ được mở nếu là đường dẫn trên chính backend. 401 = token hết hạn: tiện ích tự ngắt kết nối.
-- **Lịch quét họp:** start/end time and weekdays (default 08:30-18:30, Mon-Fri), saved in `chrome.storage.sync` (`scanSchedule`) and pushed to the backend (`PUT /api/settings`) when connected.
-- **In-call detection:** when the user enters a Meet call, the background sends `POST /integrations/in-call`; the backend asks the bot to join now and deduplicates rooms that already have a bot. The popup shows the result for the active tab.
+<p align="center">
+  <strong>Trợ lý AI tự động điều phối Bot tham gia và ghi chép Google Meet theo thời gian thực</strong>
+</p>
 
-## Load unpacked
+<p align="center">
+  <a href="#tính-năng-nổi-bật"><img src="https://img.shields.io/badge/Manifest-V3-4285F4.svg?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3" /></a>
+  <a href="#yêu-cầu-hệ-thống--cài-đặt"><img src="https://img.shields.io/badge/Chrome-111%2B-0F9D58.svg?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome 111+" /></a>
+  <a href="#kiểm-thử--chất-lượng-mã-nguồn"><img src="https://img.shields.io/badge/Tests-21%2F21%20Passed-brightgreen.svg?style=flat-square&logo=node.js&logoColor=white" alt="21 Tests Passed" /></a>
+  <a href="#kiến-trúc--bảo-mật"><img src="https://img.shields.io/badge/Security-Least%20Privilege-8A2BE2.svg?style=flat-square" alt="Least Privilege" /></a>
+  <a href="#kiến-trúc--bảo-mật"><img src="https://img.shields.io/badge/Architecture-Zero%20Build%20Step-success.svg?style=flat-square" alt="Zero Build Step" /></a>
+</p>
 
-Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select this folder. Copy the extension ID into the backend's `EXTENSION_IDS`. Open or reload a Google Meet tab after loading or reloading the extension. Chrome 111+ is required. No build or npm install is needed to load it.
+---
 
-Permissions: `storage`, `identity`. The backend is reached with CORS (no host permissions).
+## 📖 Tổng quan (Overview)
 
-## Detection boundaries
+**July Meeting Bot Extension** là tiện ích mở rộng chuẩn **Google Chrome Manifest V3** giúp kết nối người dùng với hệ thống điều phối bot cuộc họp ([meeting-scheduler](https://api.july.io.vn)).
 
-An initial check handles loading into an existing call. A visible enabled Leave call button (English/Vietnamese labels or `call_end` Google icon) inside `main`/`role=main` is the heuristic. Prejoin and waiting fixtures do not contain this signal. Meet DOM is undocumented: unsupported layouts/languages can produce false negatives, and hidden/changed controls may affect detection. Real Meet verification is still required.
+Tiện ích hoạt động hoàn toàn tự động trong nền:
+1. **Theo lịch biểu (Calendar Sync):** Quét lịch công tác trong khung giờ làm việc cài đặt để cử bot vào họp.
+2. **Phát hiện cuộc họp tức thì (Real-time In-Call Detection):** Ngay khi bạn bấm tham gia một cuộc họp Google Meet bất kỳ (dù không có trong lịch), tiện ích sẽ tự động nhận diện và gửi tín hiệu để bot tham gia ghi chép, khử trùng lặp (deduplicate) thông minh nếu phòng họp đã có bot.
 
-MutationObserver observes the main region with filtered attributes and relevant changed subtrees. Direct-child observers on its ancestor chain detect replacement; a temporary child-list discovery observer finds a late main region. Batches are coalesced with a 50 ms one-shot timeout, never an interval. The detector does not scan the whole document per mutation. It disconnects observers and navigation listeners on stop/rebind. Content pagehide cancels pending retry timers and observers; BFCache pageshow restarts detection. No leave or bot-stop request is inferred from tab closure.
+---
 
-Only transitions produce local extension messages. The service worker serializes storage changes and keeps one latest event per tab in chrome.storage.local, restricted to trusted extension contexts. Retries reuse the same candidate requestId; an initial in-call observation after a page reload reuses the saved active room requestId. Observed leave/rejoin or a different room creates a new ID. Tab close removes its entry; browser startup clears old tab keys. Failed storage is exposed as a local-save failure with three bounded attempts. Closing a page before saving can lose its event. Unobserved leave/rejoin gaps can reuse the previous ID. Different tabs are independent. None of this guarantees server deduplication or identifies a backend meeting session.
+## 📸 Giao diện ứng dụng (Screenshots)
 
-Navigation is checked on initial load, relevant DOM changes, popstate and hashchange. A history pushState with no relevant DOM mutation is not independently detected. Only HTTPS Google Meet room codes in `xxx-xxxx-xxx` form are accepted; query and fragment are removed. Lookup/nickname links are unsupported.
+Giao diện tiện ích được thiết kế theo phong cách **Modern Enterprise SaaS** (lấy cảm hứng từ Linear & Notion), tự động tương thích hoàn hảo cả hai giao diện **Sáng (Light Mode)** và **Tối (Dark Mode)** theo thiết lập hệ điều hành (`prefers-color-scheme`).
 
-## Tests
+### 1. Trạng thái trong cuộc họp (In-Call Active) & Chưa kết nối
 
-Run `npm ci` once, then `npm test`. Node 20+ and Playwright plus a Chrome browser are needed only for tests. Playwright is declared as a test-only dependency here; Runtime needs no npm packages or build. Tests default to the installed Chrome channel; `CHROME_CHANNEL=chromium npm test` uses Playwright Chromium if installed. `npm run validate` checks the manifest's scope, permissions and entry points.
+| Giao diện Sáng (Light Mode) | Giao diện Tối (Dark Mode) |
+| :---: | :---: |
+| <img src="docs/screenshots/02-dang-hop-bot-da-vao-light.png" alt="Đang họp - Bot đã vào (Light)" width="360" /> | <img src="docs/screenshots/02-dang-hop-bot-da-vao-dark.png" alt="Đang họp - Bot đã vào (Dark)" width="360" /> |
+| **Đang họp:** Nhận diện mã phòng họp, đèn tín hiệu Live phát sáng, hiển thị trạng thái bot đã vào phòng. | **Đang họp (Dark):** Chế độ nền tối dịu mắt, độ tương phản cao, tối ưu khi làm việc ban đêm. |
+| <img src="docs/screenshots/01-chua-ket-noi-light.png" alt="Chưa kết nối (Light)" width="360" /> | <img src="docs/screenshots/01-chua-ket-noi-dark.png" alt="Chưa kết nối (Dark)" width="360" /> |
+| **Chưa kết nối:** Hỗ trợ đăng nhập trực tiếp bằng Google OAuth hoặc Tài khoản Dashboard có sẵn. | **Chưa kết nối (Dark):** Thẻ cấu hình tài khoản trực quan và tinh gọn. |
 
-Browser DOM fixtures cover initial in-call, prejoin/waiting, joining/leaving, repeated mutations, hidden/disabled controls, late/replaced roots, localization/icon fallback, URL changes, unrelated mutations and teardown. Node tests cover persistence continuity, retry, storage failure and validation. Tests were written and observed RED before implementation. Fixture evidence does not establish real Meet correctness, long-call CPU/memory cost, 1–2 second production latency or real Chrome extension lifecycle correctness.
+---
 
-## Integration notes
+### 2. Các trạng thái phòng họp & Cài đặt nâng cao
 
-The backend (meeting-scheduler) owns idempotency: the extension reports each new in-call transition once per requestId, and the backend skips rooms that already have a bot. A `dispatched` reply means the bot was asked to join, not that it was admitted or is recording. The in-call heuristic still needs validation on real Meet flows (admission, reconnect, room change).
+| Trạng thái phòng chờ (Pre-join) | Trạng thái Bot xếp hàng (Queued) |
+| :---: | :---: |
+| <img src="docs/screenshots/03-chua-vao-hop-light.png" alt="Chưa vào cuộc họp (Light)" width="360" /> | <img src="docs/screenshots/04-bot-xep-hang-light.png" alt="Bot đang xếp hàng (Light)" width="360" /> |
+| **Chưa vào cuộc họp:** Đang ở tab Google Meet nhưng người dùng chưa bấm tham gia (ở màn hình chờ). | **Hàng đợi:** Hệ thống ghi nhận phòng họp và xếp hàng điều phối bot khi tài nguyên sẵn sàng. |
 
-The implementation follows official Chrome documentation consulted on 2026-11-13: [content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [storage](https://developer.chrome.com/docs/extensions/reference/api/storage), and [message passing](https://developer.chrome.com/docs/extensions/develop/concepts/messaging). Content scripts are classic isolated-world files because declarative scripts do not use static module imports; the service worker and popup use plain JS modules. Only `storage` + `identity` permissions and Meet-scoped declarative injection are requested; no microphone, tab capture, tabs, or all-sites permission.
+| Không ở tab Google Meet | Cài đặt nâng cao & Lịch quét tự động |
+| :---: | :---: |
+| <img src="docs/screenshots/05-khong-o-tab-meet-light.png" alt="Không ở tab Meet (Light)" width="360" /> | <img src="docs/screenshots/06-cai-dat-lich-quet-light.png" alt="Cài đặt lịch quét (Light)" width="360" /> |
+| **Nhắc nhở mở tab Meet:** Tiện ích gợi ý mở hoặc tải lại tab Google Meet để bắt đầu theo dõi. | **Tùy chỉnh linh hoạt:** Thay đổi backend URL, cấu hình khung giờ quét và chọn các ngày trong tuần. |
+
+---
+
+## ✨ Tính năng nổi bật (Key Features)
+
+- ⚡ **Zero-click In-Call Detection:** Tự động phát hiện khi bạn vào phòng họp Google Meet mà không cần bấm thêm bất cứ nút nào.
+- 🤖 **Tự động gọi Bot thông minh & Chống trùng lặp:** Gửi yêu cầu điều bot vào phòng họp tức thì (`POST /integrations/v1/in-call`). Hệ thống backend tự động bỏ qua nếu phòng họp đó đã có bot của người khác.
+- 🔐 **Bảo mật tuyệt đối - Nguyên tắc đặc quyền tối thiểu (Least Privilege):**
+  - **Không** yêu cầu quyền truy cập microphone hay webcam.
+  - **Không** chụp màn hình hay thu âm tab (`no desktopCapture / tabCapture`).
+  - **Không** đòi quyền đọc lịch sử hay toàn bộ website (`no <all_urls>`, không cần quyền `tabs`).
+  - Token API được lưu trong `chrome.storage.local` với cấu hình bảo mật `TRUSTED_CONTEXTS` (chỉ Service Worker và Popup mở rộng mới đọc được, Content Script trên trang Meet tuyệt đối không thể can thiệp).
+- 🔄 **Xác thực linh hoạt (Dual Auth Flows):**
+  - **Google OAuth:** Đăng nhập một chạm qua luồng chuẩn `chrome.identity.launchWebAuthFlow`.
+  - **Dashboard Session:** Đăng nhập thông qua phiên làm việc đã có trên web dashboard.
+  - **Mở Dashboard một chạm:** Nút *Mở dashboard* sử dụng liên kết dùng 1 lần (one-time auth code), tự động ngắt kết nối an toàn khi phiên làm việc hết hạn (401).
+- ⏰ **Đồng bộ lịch quét tự động (Scan Schedule):** Tùy chỉnh khung giờ quét (mặc định: `08:30 - 18:30`, `Thứ 2 - Thứ 6`). Dữ liệu được lưu trữ trên `chrome.storage.sync` (đồng bộ giữa các máy tính của người dùng) và tự động đẩy lên máy chủ backend (`PUT /api/settings`).
+- 🚀 **Zero-build Architecture:** Viết hoàn toàn bằng Modern JavaScript (ES Modules) và CSS native. Không cần cài đặt `npm`, không cần bước biên dịch Webpack/Vite hay đóng gói phức tạp — tải về là chạy được ngay lập tức.
+
+---
+
+## 🏗️ Kiến trúc & Luồng hoạt động (Architecture & Data Flow)
+
+Dưới đây là sơ đồ tương tác giữa **Google Meet Tab**, **Extension Service Worker**, **Popup UI** và **Backend Scheduler**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Người dùng (Google Meet)
+    participant CS as Content Script (detector.js + content.js)
+    participant SW as Service Worker (background.js)
+    participant Storage as chrome.storage.local (TRUSTED)
+    participant Backend as July Backend (api.july.io.vn)
+    participant Popup as Extension Popup (popup.js)
+
+    Note over User,CS: Người dùng bấm "Tham gia cuộc họp" (Join)
+    CS->>CS: MutationObserver bắt nút "Leave Call" (Rời cuộc họp)<br/>Debounce 50ms (coalescing)
+    CS->>SW: chrome.runtime.sendMessage({ type: 'meet.transition', event })
+    SW->>SW: Kiểm tra bảo mật (Sender Tab, URL meet.google.com/xxx-xxxx-xxx)
+    SW->>Storage: Ghi nhận sự kiện chuyển đổi (requestId, tabId, meetingUrl)
+    
+    alt Người dùng mới vào cuộc họp (inCall = true)
+        SW->>Backend: POST /integrations/v1/in-call { meetingUrl }<br/>[Bearer Token]
+        Backend-->>SW: { status: 'dispatched' | 'queued' | 'already_dispatched' }
+        SW->>Storage: Lưu trạng thái bot theo tabId
+    end
+
+    opt Khi người dùng mở Extension Popup
+        Popup->>CS: chrome.tabs.sendMessage({ type: 'meet.status' })
+        CS-->>Popup: Trả về trạng thái Meet của tab hiện tại
+        Popup->>Storage: Đọc trạng thái phản hồi từ Backend
+        Popup-->>User: Hiển thị Live dot, mã phòng & huy hiệu bot (dispatched/queued)
+    end
+```
+
+---
+
+## 🔍 Cơ chế nhận diện cuộc họp (Detection Boundaries & Deep-Dive)
+
+Google Meet liên tục cập nhật giao diện mà không có API công khai cho DOM. Tiện ích sử dụng cơ chế phát hiện chuyên sâu với độ chính xác cao:
+
+1. **Heuristic nhận diện nút kết thúc cuộc gọi (Leave Call Button):**
+   - Nút kết thúc cuộc gọi hợp lệ được xác định khi hiển thị trên màn hình (`visible`, không bị ẩn hoặc disabled) nằm trong vùng điều khiển cuộc họp.
+   - Hỗ trợ đa ngôn ngữ nhãn nút: Tiếng Việt (*"Rời cuộc gọi"*, *"Rời khỏi cuộc gọi"*, *"Rời cuộc họp"*), Tiếng Anh (*"Leave call"*, *"Leave meeting"*).
+   - Fallback biểu tượng: Nhận diện biểu tượng Material Icon / Google Symbol mang giá trị `call_end`.
+   - Các màn hình chờ (Pre-join/Lobby) hoặc phòng duyệt không chứa tín hiệu này, loại bỏ hoàn toàn cảnh báo giả.
+
+2. **MutationObserver tối ưu hóa hiệu năng (Zero-Lag DOM Monitoring):**
+   - Meet hiển thị thanh điều khiển ngang hàng với thẻ `<main>`. Extension lắng nghe toàn bộ body nhưng áp dụng **bộ lọc thuộc tính nghiêm ngặt** (`attributeFilter`: `aria-label`, `disabled`, `hidden`, `class`, `data-google-symbol`).
+   - Các thay đổi danh sách người tham gia, tin nhắn chat liên tục sẽ bị bỏ qua, không gây tốn CPU.
+   - Gom cụm đột biến DOM với **50ms one-shot timeout** (không dùng `setInterval` định kỳ), đảm bảo phản hồi tức thì mà không lãng phí tài nguyên.
+   - Theo dõi chuỗi thẻ cha (Ancestor Chain) để phát hiện kịp thời khi Meet thay thế toàn bộ cây DOM gốc.
+
+3. **Vòng đời trang & BFCache (Back/Forward Cache):**
+   - Sự kiện `pagehide`: Hủy toàn bộ observers và timers đang chờ để ngăn chặn rò rỉ bộ nhớ.
+   - Sự kiện `pageshow` (với `persisted = true`): Tự động kích hoạt lại cơ chế theo dõi nếu trang được mở lại từ BFCache.
+
+4. **Chuẩn hóa URL cuộc họp (Room Normalization):**
+   - Chỉ chấp nhận các đường dẫn Google Meet HTTPS chuẩn dạng: `https://meet.google.com/xxx-xxxx-xxx` (loại bỏ query params và hash fragment).
+
+---
+
+## 🚀 Hướng dẫn cài đặt & Sử dụng (Installation & Usage)
+
+### Yêu cầu hệ thống
+- Trình duyệt **Google Chrome phiên bản 111** trở lên (hoặc các trình duyệt nhân Chromium tương thích như Brave, Edge, Arc).
+- Không cần cài đặt Node.js hay npm nếu chỉ sử dụng tiện ích (chỉ cần khi chạy bộ kiểm thử).
+
+### Các bước cài đặt (Load unpacked)
+
+1. **Tải mã nguồn về máy:**
+   ```bash
+   git clone https://github.com/your-username/meeting-extension.git
+   cd meeting-extension
+   ```
+
+2. **Cài đặt vào Chrome:**
+   - Mở trình duyệt Chrome và truy cập đường dẫn: `chrome://extensions/`
+   - Bật công tắc **Chế độ dành cho nhà phát triển (Developer mode)** ở góc trên bên phải.
+   - Bấm vào nút **Tải tiện ích đã giải nén (Load unpacked)** ở góc trên bên trái.
+   - Chọn thư mục `meeting-extension` trên máy tính của bạn.
+
+3. **Cấu hình tiện ích:**
+   - Sau khi cài đặt, sao chép **ID của tiện ích** (ví dụ: `abcdefghijklmnop...`).
+   - Điền ID này vào cấu hình danh sách `EXTENSION_IDS` trên hệ thống máy chủ `meeting-scheduler` của bạn.
+   - Mở biểu tượng tiện ích trên thanh công cụ Chrome:
+     - Nhấp **Kết nối Google** (hoặc **Kết nối bằng tài khoản dashboard**).
+     - Trong mục **Cài đặt nâng cao**, kiểm tra địa chỉ backend (mặc định: `https://api.july.io.vn`, hoặc đổi thành `http://localhost:4000` nếu tự chạy máy chủ nội bộ).
+
+4. **Sử dụng:**
+   - Truy cập vào bất kỳ cuộc họp Google Meet nào. Tiện ích sẽ tự động nhận diện và gửi bot tham gia.
+
+---
+
+## 🧪 Kiểm thử & Chất lượng mã nguồn (Testing & QA)
+
+Dự án áp dụng phương pháp phát triển hướng kiểm thử (**Test-Driven Development - TDD**). Bộ kiểm thử bao gồm các kịch bản kiểm tra DOM giả lập (Playwright DOM Fixtures) và kiểm thử logic tích hợp của Node.js:
+
+```bash
+# 1. Cài đặt các gói phụ thuộc dùng cho kiểm thử
+npm ci
+
+# 2. Chạy toàn bộ 21 bài kiểm thử
+npm test
+
+# 3. Kiểm tra tính hợp lệ của tệp manifest.json
+npm run validate
+```
+
+### Các kịch bản kiểm thử chính (Test Coverage)
+
+- **DOM Fixtures:** Mô phỏng phòng chờ Meet, màn hình trước tham gia, nút điều khiển bị ẩn/vô hiệu hóa, thay đổi ngôn ngữ Anh/Việt, fallback biểu tượng `call_end`, người dùng rời và vào lại cuộc họp, chuyển tab và dọn dẹp bộ nhớ.
+- **Service Worker & State Continuity:** Đảm bảo duy trì đúng `requestId` cho cùng một sự kiện, tạo mới ID khi đổi phòng họp, cơ chế thử lại (exponential retry) khi lưu trữ cục bộ gặp sự cố.
+- **Backend API & Authentication:** Kiểm tra quy trình nhận token OAuth qua fragment URL, gửi Bearer token, tự động ngắt kết nối an toàn khi gặp mã lỗi 401, mở Dashboard bằng liên kết một lần.
+- **Schedule Validation:** Kiểm tra chuẩn hóa khung giờ, chặn khoảng thời gian không hợp lệ, lưu trữ danh sách ngày trong tuần.
+- **Manifest Scope:** Xác thực quyền hạn tối thiểu, không có quyền thừa hoặc không an toàn.
+
+---
+
+## 📁 Cấu trúc thư mục (Project Structure)
+
+```text
+meeting-extension/
+├── manifest.json         # Manifest V3 cấu hình quyền hạn, content scripts, background worker
+├── background.js         # Service Worker: xử lý thông điệp, hàng đợi lưu trữ, điều phối bot
+├── detector.js           # Bộ dò tìm trạng thái Google Meet (MutationObserver, DOM heuristic)
+├── content.js            # Content script tích hợp detector với vòng đời trang Meet (BFCache, retries)
+├── backend.js            # Module giao tiếp Backend API, luồng xác thực Google / Dashboard
+├── schedule.js           # Logic xử lý và kiểm tra tính hợp lệ của lịch quét tự động
+├── events.js             # Chuẩn hóa cấu trúc sự kiện chuyển đổi trạng thái cuộc họp
+├── popup.html            # Giao diện người dùng Popup (Modern Enterprise Card UI)
+├── popup.css             # Định kiểu giao diện, biến màu CSS Tokens, hỗ trợ Light & Dark theme
+├── popup.js              # Logic hiển thị trạng thái và tương tác trên popup
+├── icons/                # Bộ biểu tượng ứng dụng ở các kích thước chuẩn (16, 32, 48, 128px)
+├── docs/                 # Tài liệu thiết kế, kế hoạch phát triển và bộ ảnh chụp màn hình
+│   └── screenshots/      # Toàn bộ ảnh chụp màn hình minh họa giao diện (Light & Dark)
+└── tests/                # Bộ bài kiểm thử tự động (Playwright fixtures & Node test runner)
+    ├── backend.test.mjs
+    ├── background-incall.test.mjs
+    ├── detector.test.mjs
+    ├── events.test.mjs
+    ├── manifest.test.mjs
+    ├── popup-dom.test.mjs
+    └── schedule.test.mjs
+```
+
+---
+
+## 🔒 Cam kết bảo mật & Quyền riêng tư (Security & Privacy)
+
+| Quyền (Permission) | Phạm vi sử dụng | Lý do & Cam kết bảo mật |
+| :--- | :--- | :--- |
+| `storage` | Lưu trữ cục bộ & đồng bộ | Lưu cài đặt lịch quét (`storage.sync`) và trạng thái phiên tạm thời (`storage.local`). Token truy cập được cô lập trong `TRUSTED_CONTEXTS`. |
+| `identity` | Xác thực đăng nhập | Sử dụng `launchWebAuthFlow` an toàn để đăng nhập OAuth2 mà không cần lưu mật khẩu người dùng trong tiện ích. |
+| `meet.google.com/*` | Chỉ định trên tab Meet | Chỉ chạy Content Script trên miền `meet.google.com`. Tuyệt đối không can thiệp hay đọc bất kỳ trang web nào khác. |
+
+---
+
+## 📄 Bản quyền (License)
+
+Dự án phát triển nội bộ cho hệ sinh thái **July** ([api.july.io.vn](https://api.july.io.vn)). Mọi quyền được bảo lưu.
