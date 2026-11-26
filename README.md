@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="#tính-năng-nổi-bật"><img src="https://img.shields.io/badge/Manifest-V3-4285F4.svg?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3" /></a>
-  <a href="#yêu-cầu-hệ-thống--cài-đặt"><img src="https://img.shields.io/badge/Chrome-111%2B-0F9D58.svg?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome 111+" /></a>
+  <a href="#yêu-cầu-hệ-thống--cài-đặt"><img src="https://img.shields.io/badge/Chrome-116%2B-0F9D58.svg?style=flat-square&logo=googlechrome&logoColor=white" alt="Chrome 116+" /></a>
   <a href="#kiểm-thử--chất-lượng-mã-nguồn"><img src="https://img.shields.io/badge/Tests-Node%20%2B%20Chrome-brightgreen.svg?style=flat-square&logo=node.js&logoColor=white" alt="Node and Chrome Tests" /></a>
   <a href="#kiến-trúc--bảo-mật"><img src="https://img.shields.io/badge/Security-Least%20Privilege-8A2BE2.svg?style=flat-square" alt="Least Privilege" /></a>
   <a href="#kiến-trúc--bảo-mật"><img src="https://img.shields.io/badge/Architecture-Zero%20Build%20Step-success.svg?style=flat-square" alt="Zero Build Step" /></a>
@@ -61,10 +61,10 @@ Giao diện tiện ích được thiết kế theo phong cách **Modern Enterpri
 
 - ⚡ **Zero-click In-Call Detection:** Tự động phát hiện khi bạn vào phòng họp Google Meet mà không cần bấm thêm bất cứ nút nào.
 - 🤖 **Tự động gọi Bot thông minh & Chống trùng lặp:** Gửi yêu cầu điều bot vào phòng họp tức thì (`POST /integrations/v1/in-call`). Hệ thống backend tự động bỏ qua nếu phòng họp đó đã có bot của người khác.
-- 🎙️ **Ghi âm ngay trong Meet:** Nút nổi Ghi âm / Dừng, thời lượng và chế độ thu gọn. Thu tiếng tab + micro thành một file WebM/Opus, lưu từng đoạn trong IndexedDB của extension. Có trang bản ghi để tải về và xóa file.
+- 🎙️ **Ghi âm cuộc họp:** Bắt đầu qua icon July hoặc phím tắt; card nổi trong Meet hiển thị trạng thái, thời lượng và nút Dừng. Thu tiếng tab + micro thành một file WebM/Opus, lưu từng đoạn trong IndexedDB của extension. Có trang bản ghi để tải về và xóa file.
 - 🔐 **Bảo mật tuyệt đối - Nguyên tắc đặc quyền tối thiểu (Least Privilege):**
-  - Ghi âm chỉ bắt đầu sau thao tác bấm nút và xác nhận chia sẻ tab bằng hộp thoại Chrome; micro cần được cho phép. Không sử dụng webcam.
-  - Chrome yêu cầu stream chia sẻ có video, nhưng extension chỉ đưa âm thanh vào bộ ghi; không lưu video. Không cần quyền manifest `desktopCapture` / `tabCapture`.
+  - Ghi âm bắt đầu sau khi người dùng gọi extension qua icon/phím tắt. Cần cấp quyền micro một lần trên trang riêng của July. Không sử dụng webcam.
+  - `tabCapture` chỉ lấy audio của tab Meet, không gọi `getDisplayMedia`, không mở hộp chọn màn hình/cửa sổ và không thu video. Chrome vẫn có thể hiển thị chỉ báo tab đang được thu âm.
   - **Không** đòi quyền đọc lịch sử hay toàn bộ website (`no <all_urls>`, không cần quyền `tabs`).
   - Token API được lưu trong `chrome.storage.local` với cấu hình bảo mật `TRUSTED_CONTEXTS` (chỉ Service Worker và Popup mở rộng mới đọc được, Content Script trên trang Meet tuyệt đối không thể can thiệp).
 - 🔄 **Xác thực linh hoạt (Dual Auth Flows):**
@@ -140,7 +140,7 @@ Google Meet liên tục cập nhật giao diện mà không có API công khai c
 ## 🚀 Hướng dẫn cài đặt & Sử dụng (Installation & Usage)
 
 ### Yêu cầu hệ thống
-- Trình duyệt **Google Chrome phiên bản 111** trở lên (hoặc các trình duyệt nhân Chromium tương thích như Brave, Edge, Arc).
+- Trình duyệt **Google Chrome phiên bản 116** trở lên (hoặc các trình duyệt nhân Chromium tương thích hỗ trợ offscreen/tabCapture).
 - Không cần cài đặt Node.js hay npm nếu chỉ sử dụng tiện ích (chỉ cần khi chạy bộ kiểm thử).
 
 ### Các bước cài đặt (Load unpacked)
@@ -167,17 +167,17 @@ Google Meet liên tục cập nhật giao diện mà không có API công khai c
 4. **Sử dụng:**
    - Truy cập vào bất kỳ cuộc họp Google Meet nào. Tiện ích sẽ tự động nhận diện và gửi bot tham gia.
 
-### Ghi âm cuộc họp (v0.3.0)
+### Ghi âm cuộc họp (v0.4.0)
 
 1. Reload extension trong `chrome://extensions`, rồi tải lại tab Meet đã mở.
-2. Tham gia phòng họp và bấm **Ghi âm cuộc họp** trên bảng nổi ở góc dưới bên phải.
-3. Trong hộp thoại Chrome, chọn đúng tab Meet, bật **Chia sẻ âm thanh của tab** và xác nhận. Cho phép micro nếu được hỏi. Thiếu âm thanh tab hoặc quyền micro sẽ hiện lỗi và dừng thu.
-4. Bấm **Dừng ghi âm** để lưu. Extension cũng dừng khi nguồn chia sẻ kết thúc hoặc khi không còn nút rời cuộc họp khoảng 6 giây; thanh điều khiển chỉ bị ẩn không làm dừng ghi.
+2. Tham gia phòng họp. Card nổi ở góc dưới bên phải sẽ nhắc cách bắt đầu. Ghim icon July trên thanh công cụ để dễ tìm.
+3. Bấm **icon July → Ghi âm**, hoặc dùng phím tắt ghi âm. Mặc định `Alt+Shift+R` (Mac: Option+Shift+R); card/popup hiển thị phím tắt thực tế Chrome đã gán. Nếu chưa được gán, đặt lại tại `chrome://extensions/shortcuts`.
+4. Lần đầu, July mở trang cấp quyền micro. Bấm **Cho phép micro**, xác nhận, rồi quay lại Meet và gọi July để bắt đầu. Không có hộp chọn chia sẻ màn hình. Bấm **Dừng ghi âm** trong card/popup hoặc phím tắt để lưu. Extension cũng dừng khi tab đóng/tải lại/chuyển trang, nguồn thu kết thúc hoặc không còn nút rời cuộc họp khoảng 6 giây; chỉ ẩn thanh điều khiển không làm dừng ghi.
 5. Mở **Bản ghi trên máy** từ bảng nổi hoặc popup để tải file theo tên cuộc họp + thời gian.
 
 Micro được thu riêng, **không đi theo nút mute của Meet**. Để kết thúc thu micro, bấm Dừng ghi âm. Nên dùng tai nghe để tránh tiếng loa lọt lại vào micro.
 
-Reload/đóng/chuyển trang Meet sẽ kết thúc vòng đời bộ ghi. Các đoạn đã được extension xác nhận vẫn được giữ, bản ghi được đánh dấu gián đoạn; phần đuôi chưa lưu có thể mất và file có thể chưa hoàn chỉnh. Bản ghi local thuộc profile trình duyệt này, không đồng bộ qua tài khoản; gỡ extension hoặc xóa dữ liệu extension sẽ mất các file đó.
+Bộ ghi nằm trong offscreen document của extension, tiếp tục hoạt động khi popup đóng hoặc service worker khởi động lại. Mỗi lần chỉ ghi một tab. Reload/đóng/chuyển trang Meet sẽ yêu cầu bộ ghi dừng và lưu; nếu trình duyệt bị ngắt đột ngột, các đoạn đã xác nhận vẫn được giữ nhưng phần đuôi có thể mất và file được đánh dấu gián đoạn. Bản ghi cũ từ v0.3.0 vẫn đọc/tải được. File local thuộc profile trình duyệt này, không đồng bộ qua tài khoản; gỡ extension hoặc xóa dữ liệu extension sẽ mất các file đó.
 
 **Upload đang chờ contract API signed R2** (Bead `meet-ext-736`). Bản ghi hoàn tất hiện “Chờ kết nối upload”, chưa gửi lên server nào. `signed-upload.js` đã có primitive PUT bằng signed HTTPS URL, không mang cookie/token backend và không theo redirect. Endpoint xin URL, payload, quyền host/CORS, giới hạn file và bước xác nhận hoàn tất sẽ được nối khi có contract; không sử dụng gateway của extension mẫu.
 
@@ -198,6 +198,14 @@ npm test
 npm run validate
 ```
 
+Kiểm thử native đầy đủ cần Chrome for Testing hiện tại hỗ trợ nạp extension bằng CLI và CDP Extensions. Bài này dùng profile tạm, tab âm thanh tổng hợp và micro giả; không dùng tài khoản Google hay micro thật. `npm test` mặc định bỏ qua bài native nếu chưa chỉ định executable:
+
+```bash
+CAPTURE_BROWSER_EXECUTABLE="/path/to/Chrome for Testing executable" node --test tests/recording-integration.test.mjs
+```
+
+Bài native gọi action thật của Chrome để cấp `activeTab`, ghi trong offscreen, kiểm tra nguồn tab đã dừng, tải và giải mã WebM. Không dùng `--use-fake-ui-for-media-stream`: cờ đó can thiệp cả tab capture; harness chỉ tự chấp nhận camera/micro giả trong profile thử. Đã xác minh trên Chrome for Testing 158; Chromium kiểm thử cũ có thể thiếu API bảo vệ token `storage.local.setAccessLevel` dù hỗ trợ offscreen.
+
 ### Các kịch bản kiểm thử chính (Test Coverage)
 
 - **DOM Fixtures:** Mô phỏng phòng chờ Meet, màn hình trước tham gia, nút điều khiển bị ẩn/vô hiệu hóa, thay đổi ngôn ngữ Anh/Việt, fallback biểu tượng `call_end`, người dùng rời và vào lại cuộc họp, chuyển tab và dọn dẹp bộ nhớ.
@@ -205,7 +213,7 @@ npm run validate
 - **Backend API & Authentication:** Kiểm tra quy trình nhận token OAuth qua fragment URL, gửi Bearer token, tự động ngắt kết nối an toàn khi gặp mã lỗi 401, mở Dashboard bằng liên kết một lần.
 - **Schedule Validation:** Kiểm tra chuẩn hóa khung giờ, chặn khoảng thời gian không hợp lệ, lưu trữ danh sách ngày trong tuần.
 - **Manifest Scope:** Xác thực quyền hạn tối thiểu, không có quyền thừa hoặc không an toàn.
-- **Recording:** Hủy picker, từ chối micro, mất nguồn giữa lúc cấp quyền/lưu, thứ tự chunk cuối, lỗi lưu trữ, tự dừng, tải/xóa file local và signed PUT. Kiểm thử tích hợp dùng API chọn tab thật của Chrome được tự động xác nhận với tab âm thanh tổng hợp và micro giả; runtime extension được giả lập. Cuộc họp Meet đăng nhập thật và gửi R2 thật cần kiểm tra riêng.
+- **Recording:** Ràng buộc tab audio-only, khôi phục tiếng tab, quyền micro, mất nguồn giữa lúc cấp quyền/lưu, thứ tự chunk cuối, lỗi lưu trữ, tự dừng, tải/xóa file local và signed PUT. Controller/router kiểm tra nguồn gửi và phục hồi trạng thái từ offscreen sau khi worker khởi động lại. Cuộc họp Meet đăng nhập thật và gửi R2 thật cần kiểm tra riêng.
 
 ---
 
@@ -221,8 +229,11 @@ meeting-extension/
 ├── schedule.js           # Logic xử lý và kiểm tra tính hợp lệ của lịch quét tự động
 ├── events.js             # Chuẩn hóa cấu trúc sự kiện chuyển đổi trạng thái cuộc họp
 ├── recorder.js           # Thu tiếng tab + micro, tạo WebM và gửi các đoạn âm thanh theo thứ tự
+├── offscreen.html        # Trang nền giữ media streams (offscreen.js)
+├── recording-controller.js # Điều phối tabCapture, trạng thái phiên và vòng đời tab
+├── microphone.html       # Cấp quyền micro một lần (microphone.js)
 ├── recording-ui.js       # Bảng ghi âm nổi trong Meet (Shadow DOM)
-├── recording-service.js  # Kiểm tra nguồn gửi, quyền sở hữu bản ghi và dữ liệu chunk
+├── recording-service.js  # Kiểm tra nguồn gửi lệnh start/status/stop và state
 ├── recording-store.js    # IndexedDB của extension: metadata và audio chunks
 ├── recordings.html       # Trang quản lý file local (recordings.js / recordings.css)
 ├── signed-upload.js      # Signed HTTPS PUT; chờ contract API để nối luồng upload
@@ -250,6 +261,8 @@ meeting-extension/
 | :--- | :--- | :--- |
 | `storage` | Lưu trữ cục bộ & đồng bộ | Lưu cài đặt lịch quét (`storage.sync`) và trạng thái phiên tạm thời (`storage.local`). Token truy cập được cô lập trong `TRUSTED_CONTEXTS`. |
 | `identity` | Xác thực đăng nhập | Sử dụng `launchWebAuthFlow` an toàn để đăng nhập OAuth2 mà không cần lưu mật khẩu người dùng trong tiện ích. |
+| `activeTab`, `tabCapture` | Tab được người dùng gọi extension | Thu audio tab sau thao tác qua icon/phím tắt; không thu video/màn hình. |
+| `offscreen` | Trang nền của extension | Giữ media streams, trộn tab+micro, phát lại tiếng tab và lưu file khi popup đóng/worker nghỉ. |
 | `meet.google.com/*` | Chỉ định trên tab Meet | Chỉ chạy Content Script trên miền `meet.google.com`. Tuyệt đối không can thiệp hay đọc bất kỳ trang web nào khác. |
 
 ---

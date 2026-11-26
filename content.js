@@ -45,6 +45,7 @@
   function onMessage(message, _sender, respond) {
     if (message?.type === 'meet.status') respond({
       detected: Boolean(detector), ...detector?.getState(), localSave:status,
+      title: document.title.replace(/\s*(?:[-–—|]\s*)?Google Meet\s*$/i, '').replace(/^Meet\s*[-–—|]\s*/i, '').trim(),
       requestId:latestEvent?.requestId ?? null, backendConnected:false
     });
   }

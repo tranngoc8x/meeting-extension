@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cấp quyền micro · July</title>
+  <link rel="stylesheet" href="recordings.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">JULY MEETING</p>
+    <h1>Cấp quyền micro cho July</h1>
+    <p class="intro">July cần quyền micro để ghi giọng của bạn cùng âm thanh cuộc họp. Bạn chỉ cần cấp quyền một lần cho extension.</p>
+    <button id="allow-microphone" class="download" type="button">Cho phép micro</button>
+    <p id="microphone-status" role="status">Bấm nút rồi chọn Cho phép trong thông báo của Chrome.</p>
+    <p id="error" role="alert"></p>
+    <p class="intro">Trang này chỉ kiểm tra quyền rồi tắt micro ngay. Để ghi âm, quay lại tab Meet và bấm icon July → Ghi âm, hoặc dùng phím tắt đã đặt.</p>
+    <p class="intro">Khi đang ghi âm, micro được thu riêng kể cả lúc bạn tắt mic trong Meet. Bấm Dừng ghi âm để kết thúc thu.</p>
+  </main>
+  <script type="module" src="microphone.js"></script>
+</body>
+</html>

@@ -25,27 +25,28 @@ async function fixture(t, options = {}) {
       const stream = { getTracks: () => tracks, getAudioTracks: () => tracks.filter(t => t.kind === 'audio'), getVideoTracks: () => tracks.filter(t => t.kind === 'video') };
       streams.push(stream); return stream;
     };
-    window.displayStream = makeStream(!options.noAudio);
+    window.displayStream = makeStream(!options.noAudio, false);
     window.microphoneStream = makeStream(true, false);
     const mediaDevices = {
-      getDisplayMedia(constraints) {
-        window.displayCalls++; window.displayOptions = constraints;
-        if (options.cancel) return Promise.reject(new DOMException('Canceled', 'NotAllowedError'));
-        if (options.pending) return new Promise(resolve => { window.resolvePicker = () => resolve(displayStream); });
-        return Promise.resolve(displayStream);
-      },
-      getUserMedia() {
+      getDisplayMedia() { throw new Error('Screen sharing must never be requested'); },
+      getUserMedia(constraints) {
+        if (constraints.audio?.mandatory) {
+          window.displayCalls++; window.displayOptions = constraints;
+          if (options.cancel) return Promise.reject(new DOMException('Not invoked', 'NotAllowedError'));
+          if (options.pending) return new Promise(resolve => { window.resolvePicker = () => resolve(displayStream); });
+          return Promise.resolve(displayStream);
+        }
         if (options.pendingMic) return new Promise(resolve => { window.resolveMicrophone = () => resolve(microphoneStream); });
         return options.micDenied ? Promise.reject(new DOMException('Denied', 'NotAllowedError')) : Promise.resolve(microphoneStream);
       },
     };
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
     window.MediaStream = class { constructor(tracks) { this.tracks = tracks; } getTracks() { return this.tracks; } getAudioTracks() { return this.tracks.filter(t => t.kind === 'audio'); } getVideoTracks() { return this.tracks.filter(t => t.kind === 'video'); } };
-    window.contexts = [];
+    window.contexts = []; window.connections = [];
     window.AudioContext = class {
       state = 'running';
-      constructor() { contexts.push(this); }
-      createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
+      constructor() { contexts.push(this); this.destination = { kind: 'speakers' }; }
+      createMediaStreamSource(stream) { return { connect(target) { connections.push([stream.getAudioTracks()[0] === displayStream.getAudioTracks()[0] ? 'tab' : 'mic', target.kind || 'mixed']); }, disconnect() {} }; }
       createMediaStreamDestination() { return { stream: new MediaStream([track('audio')]) }; }
       async close() { this.state = 'closed'; }
       async resume() {}
@@ -73,12 +74,12 @@ async function fixture(t, options = {}) {
       },
       onState: value => states.push(value),
     });
-    window.metadata = { meetingUrl: 'https://meet.google.com/abc-defg-hij', title: 'Weekly planning' };
+    window.metadata = { streamId: 'tab-stream-id', meetingUrl: 'https://meet.google.com/abc-defg-hij', title: 'Weekly planning' };
   });
   return page;
 }
 
-test('recording starts picker immediately, records audio only, and persists final chunk before finish', async t => {
+test('recording consumes audio-only tab stream ID, restores only tab playback, and persists final chunk before finish', async t => {
   const page = await fixture(t, { delayChunk: true });
   const result = await page.evaluate(async () => {
     const pending = recorder.start(metadata);
@@ -87,9 +88,11 @@ test('recording starts picker immediately, records audio only, and persists fina
     mediaRecorder.emit('first'); mediaRecorder.emit('second');
     await recorder.stop();
     return { synchronousCalls, messages, state: recorder.getState(), audio: encodedStream.getAudioTracks().length, video: encodedStream.getVideoTracks().length,
-      stopped: streams.every(s => s.getTracks().every(t => t.readyState === 'ended')), contextsClosed: contexts.every(c => c.state === 'closed') };
+      stopped: streams.every(s => s.getTracks().every(t => t.readyState === 'ended')), contextsClosed: contexts.every(c => c.state === 'closed'), constraints: displayOptions, connections };
   });
   assert.equal(result.synchronousCalls, 1);
+  assert.deepEqual(result.constraints, { audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: 'tab-stream-id' } }, video: false });
+  assert.deepEqual(result.connections, [['tab', 'mixed'], ['tab', 'speakers'], ['mic', 'mixed']]);
   assert.equal(result.audio, 1); assert.equal(result.video, 0);
   assert.deepEqual(result.messages.map(m => m.type), ['recording.begin', 'recording.chunk', 'recording.chunk', 'recording.chunk', 'recording.finish']);
   assert.deepEqual(result.messages.filter(m => m.type === 'recording.chunk').map(m => [m.sequence, atob(m.data)]), [[0, 'first'], [1, 'second'], [2, 'final']]);
@@ -97,21 +100,21 @@ test('recording starts picker immediately, records audio only, and persists fina
   assert.equal(result.stopped, true); assert.equal(result.contextsClosed, true);
 });
 
-test('picker cancellation, missing tab sound and denied microphone never leave capture tracks running', async t => {
+test('tab acquisition failure, missing tab sound and denied microphone never leave capture tracks running', async t => {
   for (const options of [{ cancel: true }, { noAudio: true }, { micDenied: true }]) {
     const page = await fixture(t, options);
     const result = await page.evaluate(async () => {
       await recorder.start(metadata);
       return { state: recorder.getState(), messages, displayStopped: displayStream.getTracks().every(t => t.readyState === 'ended') };
     });
-    assert.equal(result.state.status, options.cancel ? 'idle' : 'error');
+    assert.equal(result.state.status, 'error');
     assert.deepEqual(result.messages, []);
     if (!options.cancel) assert.equal(result.displayStopped, true);
     if (!options.cancel) assert.ok(result.state.error);
   }
 });
 
-test('duplicate starts share one picker and stop during a pending picker releases the returned stream', async t => {
+test('duplicate starts share one tab acquisition and stop during pending acquisition releases the returned stream', async t => {
   const page = await fixture(t, { pending: true });
   const result = await page.evaluate(async () => {
     const first = recorder.start(metadata), second = recorder.start(metadata);
@@ -144,7 +147,7 @@ test('sharing stopped while microphone permission is pending cannot later start 
   await page.evaluate(() => { window.starting = recorder.start(metadata); });
   await page.waitForFunction(() => typeof resolveMicrophone === 'function');
   const result = await page.evaluate(async () => {
-    const track = displayStream.getVideoTracks()[0]; track.stop(); track.dispatchEvent(new Event('ended'));
+    const track = displayStream.getAudioTracks()[0]; track.stop(); track.dispatchEvent(new Event('ended'));
     resolveMicrophone(); await starting;
     return { state: recorder.getState(), messages, stopped: streams.every(s => s.getTracks().every(t => t.readyState === 'ended')) };
   });
@@ -184,7 +187,7 @@ test('persistence failure preserves error and finalizes as interrupted after rel
 
 test('ending the shared tab stops capture and finalizes once', async t => {
   const page = await fixture(t);
-  await page.evaluate(async () => { await recorder.start(metadata); displayStream.getVideoTracks()[0].dispatchEvent(new Event('ended')); });
+  await page.evaluate(async () => { await recorder.start(metadata); displayStream.getAudioTracks()[0].dispatchEvent(new Event('ended')); });
   await page.waitForFunction(() => recorder.getState().status === 'saved');
   const result = await page.evaluate(() => ({ messages, stopped: streams.every(s => s.getTracks().every(t => t.readyState === 'ended')) }));
   assert.equal(result.messages.filter(m => m.type === 'recording.finish').length, 1);
@@ -225,8 +228,8 @@ test('real WebAudio and MediaRecorder produce decodable audio-only WebM', async 
     const oscillator = context.createOscillator(); oscillator.frequency.value = 440; oscillator.connect(destination); oscillator.start();
     window.fixtureOscillator = oscillator;
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: {
-      getDisplayMedia: async () => destination.stream,
-      getUserMedia: async () => destination.stream.clone(),
+      getDisplayMedia: () => { throw Error('Screen sharing forbidden'); },
+      getUserMedia: async constraints => constraints.audio?.mandatory ? destination.stream : destination.stream.clone(),
     } });
     window.messages = [];
   });
@@ -234,7 +237,7 @@ test('real WebAudio and MediaRecorder produce decodable audio-only WebM', async 
   assert.equal(await page.evaluate(() => typeof window.MeetingRecorder?.create), 'function');
   await page.evaluate(async () => {
     window.recorder = MeetingRecorder.create({ send: async message => { messages.push(message); return { ok: true }; }, onState() {} });
-    await recorder.start({ meetingUrl: 'https://meet.google.com/abc-defg-hij', title: 'Synthetic capture' });
+    await recorder.start({ streamId: 'synthetic-tab', meetingUrl: 'https://meet.google.com/abc-defg-hij', title: 'Synthetic capture' });
   });
   await page.waitForTimeout(1200);
   const result = await page.evaluate(async () => {

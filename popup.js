@@ -3,6 +3,36 @@ import { DEFAULT_BACKEND_URL, api, backendStatusKey, getConnection, openDashboar
 
 const $ = selector => document.querySelector(selector);
 const local = chrome.storage.local;
+let canRecordCurrentTab = false, recordingState = { status: 'idle' }, recordingActive = false;
+function renderRecording(result) {
+  if (!result?.ok) { $('#recording-error').textContent = result?.error || 'Không đọc được trạng thái ghi âm'; return; }
+  recordingState = result.state || { status: 'idle' };
+  recordingActive = Boolean(result.active) || ['starting', 'recording', 'saving'].includes(recordingState.status);
+  const active = recordingActive;
+  $('#recording-toggle').textContent = active ? 'Dừng ghi âm' : 'Ghi âm';
+  $('#recording-toggle').disabled = recordingState.status === 'saving' || (!active && !canRecordCurrentTab);
+  $('#recording-state').textContent = ({ starting: 'Đang bắt đầu ghi âm…', recording: `Đang ghi âm ${result.meetingUrl?.split('/').at(-1) || ''}`, saving: 'Đang lưu…', saved: 'Đã lưu trên máy · Chờ kết nối upload', error: 'Chưa thể ghi âm' })[recordingState.status]
+    || (canRecordCurrentTab ? 'Sẵn sàng ghi âm tab Meet hiện tại' : 'Tham gia một cuộc họp Meet để bắt đầu');
+  $('#recording-error').textContent = recordingState.error || '';
+  if (result.shortcut !== undefined) $('#recording-shortcut').textContent = result.shortcut ? `Phím tắt: ${result.shortcut}` : 'Có thể đặt phím tắt tại chrome://extensions/shortcuts';
+}
+async function loadRecording() {
+  try { renderRecording(await chrome.runtime.sendMessage({ type: 'recording.status' })); }
+  catch (error) { $('#recording-error').textContent = error.message; }
+}
+$('#recording-toggle').addEventListener('click', async () => {
+  $('#recording-toggle').disabled = true;
+  $('#recording-error').textContent = '';
+  try {
+    const active = recordingActive;
+    renderRecording(await chrome.runtime.sendMessage({ type: active ? 'recording.stop' : 'recording.start' }));
+  } catch (error) { $('#recording-error').textContent = error.message; }
+  finally { if (recordingState.status !== 'saving') $('#recording-toggle').disabled = !canRecordCurrentTab && !recordingActive; }
+});
+$('#microphone-setup').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('microphone.html') }));
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === 'recording.state' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('offscreen.html')) renderRecording({ ...message, ok: true });
+});
 
 // Backend /integrations/in-call results → label + tone.
 const BOT_STATUS = {
@@ -70,6 +100,7 @@ async function refresh() {
     if (!Number.isInteger(tab?.id)) throw new Error();
     const status = await chrome.tabs.sendMessage(tab.id, { type: 'meet.status' });
     if (!status?.detected) throw new Error();
+    canRecordCurrentTab = Boolean(status.inCall);
     const saved = (await local.get(backendStatusKey(tab.id)))[backendStatusKey(tab.id)];
     showTab(status.inCall ? 'Đang trong cuộc họp' : 'Chưa vào cuộc họp', {
       live: status.inCall,
@@ -77,9 +108,11 @@ async function refresh() {
       bot: saved && saved.meetingUrl === status.meetingUrl ? saved.status : null,
     });
   } catch {
+    canRecordCurrentTab = false;
     // No content script answered: not a Meet tab, or a Meet tab opened before the extension loaded.
     showTab('Mở (hoặc tải lại) tab Google Meet để theo dõi');
   }
+  await loadRecording();
 }
 $('#refresh').addEventListener('click', refresh);
 $('#open-recordings').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('recordings.html') }));

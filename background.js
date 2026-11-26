@@ -3,6 +3,7 @@ import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect, m
 import { loadSchedule } from './schedule.js';
 import { createRecordingStore } from './recording-store.js';
 import { createRecordingService, RECORDING_MESSAGES } from './recording-service.js';
+import { createRecordingController } from './recording-controller.js';
 // Serialize storage read/modify/write.
 let queue = Promise.resolve();
 function enqueue(operation) {
@@ -60,31 +61,42 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   return true;
 });
 const recordingStore = createRecordingStore();
+const recordingController = createRecordingController(chrome, { interruptTab: tabId => recordingStore.interruptTab(tabId) });
 const recordingMessage = createRecordingService({
-  store: recordingStore,
+  controller: recordingController,
   runtimeId: chrome.runtime.id,
+  getURL: path => chrome.runtime.getURL(path),
   openLibrary: () => chrome.tabs.create({ url: chrome.runtime.getURL('recordings.html') }),
 });
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (!RECORDING_MESSAGES.has(message?.type)) return;
-  enqueue(() => recordingMessage(message, sender)).then(respond, error => respond({ ok: false, error: error.message }));
+  // Do not queue state/stop behind a media startup waiting for user permission.
+  recordingMessage(message, sender).then(respond, error => respond({ ok: false, error: error.message, ...(error.needsMicrophone ? { needsMicrophone: true } : {}) }));
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId => {
   enqueue(async () => {
     await chrome.storage.local.remove([tabKey(tabId), backendStatusKey(tabId)]);
-    await recordingStore.interruptTab(tabId);
+    await recordingController.tabClosed(tabId);
   }).catch(() => {});
 });
-// The recording streams belong to the Meet document; a reload destroys them.
+// Offscreen owns the media; explicitly stop when its Meet document goes away.
 chrome.tabs.onUpdated?.addListener((tabId, change) => {
-  if (change.status === 'loading') enqueue(() => recordingStore.interruptTab(tabId)).catch(() => {});
+  if (change.status === 'loading') recordingController.tabNavigated(tabId).catch(() => {});
+});
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command !== 'record-meeting') return;
+  (async () => {
+    const status = await recordingController.status();
+    if (status.active) await recordingController.stop();
+    else await recordingController.start(tab);
+  })().catch(() => {}); // controller publishes actionable errors to the Meet card.
 });
 // Tab IDs are not durable across browser sessions. Reload within a session keeps ID.
 chrome.runtime.onStartup.addListener(() => {
   enqueue(async () => {
     const data = await chrome.storage.local.get(null);
     await chrome.storage.local.remove(Object.keys(data).filter(k => k.startsWith('meet-detection:') || k.startsWith('meet-backend:')));
-    await recordingStore.recover();
+    if (!(await recordingController.status()).active) await recordingStore.recover();
   }).catch(() => {});
 });

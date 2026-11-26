@@ -35,47 +35,56 @@
       </style>
       <section class="panel" aria-label="July ghi âm cuộc họp">
         <header><span>July · Ghi âm</span><button class="quiet collapse" type="button" aria-label="Thu gọn">−</button></header>
-        <button class="primary" type="button" disabled><span class="dot" aria-hidden="true"></span><span class="label">Ghi âm cuộc họp</span></button>
-        <p class="help">Chọn tab Meet và bật “Chia sẻ âm thanh của tab”. Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
+        <button class="primary" type="button" disabled><span class="dot" aria-hidden="true"></span><span class="label">Cách bắt đầu ghi âm</span></button>
+        <p class="help">Bấm icon July trên thanh công cụ → Ghi âm. <span class="shortcut"></span> Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
         <p class="status" role="status">Vào cuộc họp để bắt đầu ghi âm</p>
         <p class="error" role="alert"></p>
         <footer><span class="timer">00:00</span><button class="quiet files" type="button">Bản ghi trên máy</button></footer>
         <button class="quiet expand" type="button">Mở rộng</button>
       </section>`;
     const $ = selector => shadow.querySelector(selector);
-    let meeting = { inCall: false, meetingUrl: null }, state = { status: 'idle' }, recordingRoom = null, absentSince = null, disposed = false;
-    const active = () => ['selecting', 'recording', 'saving'].includes(state.status);
+    let meeting = { inCall: false, meetingUrl: null }, state = { status: 'idle' }, captureActive = false, receivedState = false, recordingRoom = null, absentSince = null, disposed = false;
+    const active = () => captureActive || ['starting', 'recording', 'saving'].includes(state.status);
     function render() {
       const busy = state.status === 'saving';
       $('.primary').disabled = busy || (!active() && !meeting.inCall);
-      const label = state.status === 'recording' ? 'Dừng ghi âm' : state.status === 'selecting' ? 'Hủy ghi âm' : busy ? 'Đang lưu…' : 'Ghi âm cuộc họp';
+      const label = busy ? 'Đang lưu…' : state.status === 'starting' ? 'Hủy ghi âm' : active() ? 'Dừng ghi âm' : 'Cách bắt đầu ghi âm';
       $('.label').textContent = label;
       $('.primary').setAttribute('aria-label', label);
       $('.error').textContent = state.error || '';
       $('.status').textContent = ({
-        selecting: 'Chọn tab Meet trong hộp thoại Chrome', recording: 'Đang ghi âm · Tiếng tab + micro',
+        starting: 'Đang bắt đầu ghi âm…', recording: 'Đang ghi âm · Tiếng tab + micro',
         saving: 'Đang lưu bản ghi trên máy…', saved: 'Đã lưu trên máy · Chờ kết nối upload',
-        error: 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
+        error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
       })[state.status] || (meeting.inCall ? 'Sẵn sàng ghi âm' : 'Vào cuộc họp để bắt đầu ghi âm');
       $('.primary').title = state.status === 'recording' ? 'Dừng và lưu bản ghi' : label;
     }
-    const recorder = MeetingRecorder.create({
-      send: message => chrome.runtime.sendMessage(message),
-      onState: next => {
-        state = next;
-        if (next.status !== 'recording') absentSince = null;
-        if (!disposed) render();
-      },
-    });
-    function stop() { recorder.stop().catch(error => { state = { status: 'error', error: error.message }; render(); }); }
+    function apply(result) {
+      if (disposed) return;
+      if (!result?.ok) throw Error(result?.error || 'Không đọc được trạng thái ghi âm');
+      state = result.state || { status: 'idle' };
+      captureActive = Boolean(result.active);
+      recordingRoom = result.meetingUrl || recordingRoom;
+      if (result.shortcut !== undefined) $('.shortcut').textContent = result.shortcut ? `Hoặc dùng ${result.shortcut}.` : '';
+      if (state.status !== 'recording') absentSince = null;
+      render();
+    }
+    function showError(error) { if (!disposed) { state = { status: 'error', error: error.message }; render(); } }
+    function onMessage(message, sender) {
+      if (message?.type !== 'recording.state' || sender.id !== chrome.runtime.id) return;
+      receivedState = true;
+      apply({ ...message, ok: true });
+    }
+    chrome.runtime.onMessage.addListener(onMessage);
+    chrome.runtime.sendMessage({ type: 'recording.status' }).then(result => { if (!receivedState) apply(result); }).catch(showError);
+    function stop() {
+      state = { ...state, status: 'saving' }; render();
+      chrome.runtime.sendMessage({ type: 'recording.stop' }).then(apply).catch(showError);
+    }
     $('.primary').addEventListener('click', () => {
       if (active()) { stop(); return; }
-      // Do not await anything before start: the picker needs this click's activation.
-      const title = document.title.replace(/\s*(?:[-–—|]\s*)?Google Meet\s*$/i, '').replace(/^Meet\s*[-–—|]\s*/i, '').trim();
-      recordingRoom = meeting.meetingUrl;
-      recorder.start({ meetingUrl: meeting.meetingUrl, title: title || meeting.meetingUrl?.split('/').at(-1) }).catch(error => {
-        state = { status: 'error', error: error.message }; render();
-      });
+      $('.panel').classList.remove('compact');
+      $('.status').textContent = 'Bấm icon July trên thanh công cụ, rồi chọn Ghi âm. Ghim July để dễ tìm.';
     });
     $('.collapse').addEventListener('click', () => $('.panel').classList.add('compact'));
     $('.expand').addEventListener('click', () => $('.panel').classList.remove('compact'));
@@ -104,7 +113,8 @@
       dispose() {
         disposed = true;
         clearInterval(ticker);
-        recorder.stop().catch(() => {});
+        chrome.runtime.onMessage.removeListener(onMessage);
+        if (active()) chrome.runtime.sendMessage({ type: 'recording.stop' }).catch(() => {});
         host.remove();
       },
     };

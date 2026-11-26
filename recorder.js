@@ -1,5 +1,5 @@
-// Classic content script. Media remains in the isolated world; only audio chunks
-// cross the extension message boundary, never credentials or captured video.
+// Classic script loaded by the extension's offscreen document. The service worker
+// obtains the tab stream ID after an explicit extension invocation.
 (() => {
   const MAX_PENDING_CHUNKS = 8;
   function create({ send, onState = () => {} }) {
@@ -49,7 +49,7 @@
           if (microphone || !session.started) {
             session.failure ||= microphone
               ? 'Micro đã ngắt kết nối. Bản ghi đã dừng.'
-              : 'Chia sẻ tab đã kết thúc trước khi ghi âm bắt đầu. Hãy thử lại.';
+              : 'Âm thanh tab đã kết thúc trước khi ghi âm bắt đầu. Hãy thử lại.';
           }
           void stop();
         };
@@ -60,7 +60,7 @@
     function ensureLiveInputs(session) {
       if (!session.display.getAudioTracks().some(track => track.readyState === 'live')
         || session.display.getTracks().some(track => track.readyState !== 'live')) {
-        throw new Error('Chia sẻ tab đã kết thúc trước khi ghi âm bắt đầu. Hãy thử lại.');
+        throw new Error('Âm thanh tab đã kết thúc trước khi ghi âm bắt đầu. Hãy thử lại.');
       }
       if (session.mic && (!session.mic.getAudioTracks().some(track => track.readyState === 'live')
         || session.mic.getAudioTracks().some(track => track.readyState !== 'live'))) {
@@ -94,7 +94,7 @@
         session.display = await displayPromise;
         if (session.canceled) { await finish(session); return; }
         if (!session.display.getAudioTracks().some(track => track.readyState === 'live')) {
-          throw new Error('Chưa có âm thanh tab. Hãy chọn tab Meet và bật chia sẻ âm thanh.');
+          throw new Error('Không thu được âm thanh tab Meet. Hãy bấm icon July để thử lại.');
         }
         ensureLiveInputs(session);
         watchTracks(session, session.display);
@@ -118,6 +118,9 @@
         for (const input of [session.display, session.mic]) {
           const source = session.context.createMediaStreamSource(new MediaStream(input.getAudioTracks()));
           source.connect(destination);
+          // tabCapture diverts the tab's normal playback. Restore only the tab;
+          // routing the microphone here would create feedback.
+          if (input === session.display) source.connect(session.context.destination);
           session.sources.push(source);
         }
         if (session.context.state === 'suspended') await session.context.resume();
@@ -142,8 +145,7 @@
         session.started = true;
         publish({ status: 'recording', id: session.id, startedAt: session.startedAt });
       } catch (error) {
-        // Dismissing the picker is an intentional cancellation, not an error.
-        if (!(error?.name === 'NotAllowedError' && !session.display) && !session.canceled) {
+        if (!session.canceled) {
           session.failure = error?.message || 'Không thể bắt đầu ghi âm.';
         }
         await finish(session);
@@ -154,15 +156,13 @@
       const session = { id: crypto.randomUUID(), queue: Promise.resolve(), pending: 0, sequence: 0,
         listeners: [], sources: [], canceled: false, persisted: false };
       current = session;
-      publish({ status: 'selecting' });
+      publish({ status: 'starting' });
       let displayPromise;
       try {
-        // Keep this call in the original click stack: no await/RPC before it.
-        displayPromise = navigator.mediaDevices.getDisplayMedia({
-          video: { displaySurface: 'browser' },
-          audio: { suppressLocalAudioPlayback: false },
-          preferCurrentTab: true, selfBrowserSurface: 'include',
-          surfaceSwitching: 'exclude', systemAudio: 'exclude',
+        if (typeof metadata?.streamId !== 'string' || !metadata.streamId) throw Error('Thiếu quyền thu âm tab. Hãy bấm icon July để bắt đầu.');
+        displayPromise = navigator.mediaDevices.getUserMedia({
+          audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: metadata.streamId } },
+          video: false,
         });
       } catch (error) { displayPromise = Promise.reject(error); }
       session.starting = startSession(session, displayPromise, metadata);
@@ -175,8 +175,8 @@
       if (!session.recorder || !session.persisted || session.recorder.state === 'inactive') {
         session.canceled = true;
         void cleanup(session);
-        // A native picker cannot be closed programmatically. Its eventual stream
-        // is released by startSession, and no audio is persisted.
+        // A pending media acquisition cannot be aborted; release any stream as
+        // soon as it arrives and do not persist it.
         publish(session.failure ? { status: 'error', id: session.id, error: session.failure } : { status: 'idle' });
         return Promise.resolve();
       }
