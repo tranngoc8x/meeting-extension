@@ -1,6 +1,8 @@
 import { recordTransition, tabKey } from './events.js';
 import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect, migrateLegacyBackend } from './backend.js';
 import { loadSchedule } from './schedule.js';
+import { createRecordingStore } from './recording-store.js';
+import { createRecordingService, RECORDING_MESSAGES } from './recording-service.js';
 // Serialize storage read/modify/write.
 let queue = Promise.resolve();
 function enqueue(operation) {
@@ -57,11 +59,32 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }, () => respond({ok:false,error:'Local event could not be saved'}));
   return true;
 });
-chrome.tabs.onRemoved.addListener(tabId => { enqueue(() => chrome.storage.local.remove([tabKey(tabId), backendStatusKey(tabId)])).catch(() => {}); });
+const recordingStore = createRecordingStore();
+const recordingMessage = createRecordingService({
+  store: recordingStore,
+  runtimeId: chrome.runtime.id,
+  openLibrary: () => chrome.tabs.create({ url: chrome.runtime.getURL('recordings.html') }),
+});
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (!RECORDING_MESSAGES.has(message?.type)) return;
+  enqueue(() => recordingMessage(message, sender)).then(respond, error => respond({ ok: false, error: error.message }));
+  return true;
+});
+chrome.tabs.onRemoved.addListener(tabId => {
+  enqueue(async () => {
+    await chrome.storage.local.remove([tabKey(tabId), backendStatusKey(tabId)]);
+    await recordingStore.interruptTab(tabId);
+  }).catch(() => {});
+});
+// The recording streams belong to the Meet document; a reload destroys them.
+chrome.tabs.onUpdated?.addListener((tabId, change) => {
+  if (change.status === 'loading') enqueue(() => recordingStore.interruptTab(tabId)).catch(() => {});
+});
 // Tab IDs are not durable across browser sessions. Reload within a session keeps ID.
 chrome.runtime.onStartup.addListener(() => {
   enqueue(async () => {
     const data = await chrome.storage.local.get(null);
     await chrome.storage.local.remove(Object.keys(data).filter(k => k.startsWith('meet-detection:') || k.startsWith('meet-backend:')));
+    await recordingStore.recover();
   }).catch(() => {});
 });

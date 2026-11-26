@@ -82,6 +82,7 @@ async function refresh() {
   }
 }
 $('#refresh').addEventListener('click', refresh);
+$('#open-recordings').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('recordings.html') }));
 chrome.tabs.onActivated.addListener(refresh);
 
 // --- Scan schedule -------------------------------------------------------------

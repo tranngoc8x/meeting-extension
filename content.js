@@ -1,6 +1,6 @@
 (() => {
   globalThis.__meetDetectionStop?.();
-  let detector, closed = false, pending = Promise.resolve(), status = 'No transition saved';
+  let detector, recordingPanel, closed = false, pending = Promise.resolve(), status = 'No transition saved';
   let latestEvent = null;
   const retries = new Map();
   async function save(event) {
@@ -23,16 +23,22 @@
   function start() {
     if (detector) return;
     closed = false;
+    if (MeetDetector.normalizeUrl(document.location.href)) recordingPanel = MeetingRecordingUI.create();
     detector = MeetDetector.create({document, onTransition: transition => {
+      if (!recordingPanel && MeetDetector.normalizeUrl(document.location.href)) recordingPanel = MeetingRecordingUI.create();
+      recordingPanel?.updateMeeting(transition);
       const event = {...transition,requestId:crypto.randomUUID()};
       status = 'Saving locally';
       pending = pending.then(() => save(event)).catch(() => { status='Local save failed'; });
     }});
+    recordingPanel?.updateMeeting(detector.getState());
   }
   function suspend() {
     closed = true;
     detector?.stop();
     detector = null;
+    recordingPanel?.dispose();
+    recordingPanel = null;
     for (const [timer,resolve] of retries) { clearTimeout(timer); resolve(); }
     retries.clear();
   }
