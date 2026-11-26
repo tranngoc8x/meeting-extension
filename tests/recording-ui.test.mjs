@@ -27,12 +27,10 @@ async function fixture(t) {
   return page;
 }
 
-test('in-Meet reminder explains extension invocation without starting screen capture; active control stops via worker', async t => {
+test('Meet card shows recording state and useful controls without an extra guidance-only button', async t => {
   const p = await fixture(t);
-  const record = p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true });
-  assert.equal(await record.isDisabled(), true);
+  assert.equal(await p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true }).count(), 0);
   await p.evaluate(() => panel.updateMeeting({ inCall: true, meetingUrl: 'https://meet.google.com/abc-defg-hij' }));
-  await record.click();
   assert.equal(await p.evaluate(() => messages.some(message => message.type === 'recording.start')), false);
   assert.match(await p.getByRole('status').textContent(), /icon July/);
   assert.match(await p.locator('#july-recording-panel').locator('.shortcut').textContent(), /Alt\+Shift\+R/);
@@ -42,16 +40,18 @@ test('in-Meet reminder explains extension invocation without starting screen cap
   assert.equal(await p.getByRole('status').textContent(), 'Đã lưu trên máy · Chờ kết nối upload');
   await p.getByRole('button', { name: 'Bản ghi trên máy' }).click();
   assert.equal(await p.evaluate(() => messages.at(-1).type), 'recordings.open');
+  await p.getByRole('button', { name: 'Cài đặt July' }).click();
+  assert.equal(await p.evaluate(() => messages.at(-1).type), 'settings.open');
 });
 
-test('recording errors are visible and compact mode retains a working primary control', async t => {
+test('recording errors and idle status remain visible in compact mode', async t => {
   const p = await fixture(t);
   await p.evaluate(() => panel.updateMeeting({ inCall: true, meetingUrl: 'https://meet.google.com/abc-defg-hij' }));
   await p.getByRole('button', { name: 'Thu gọn' }).click();
-  assert.equal(await p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true }).isVisible(), true);
+  assert.equal(await p.getByRole('status').isVisible(), true);
   await p.evaluate(() => emitState({ status: 'error', error: 'Cần cấp quyền micro cho July' }));
   assert.equal(await p.getByRole('alert').textContent(), 'Cần cấp quyền micro cho July');
-  assert.equal(await p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true }).isEnabled(), true);
+  assert.equal(await p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true }).count(), 0);
 });
 
 test('panel typography is isolated from the host page defaults', async t => {

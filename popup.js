@@ -29,7 +29,11 @@ $('#recording-toggle').addEventListener('click', async () => {
   } catch (error) { $('#recording-error').textContent = error.message; }
   finally { if (recordingState.status !== 'saving') $('#recording-toggle').disabled = !canRecordCurrentTab && !recordingActive; }
 });
-$('#microphone-setup').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('microphone.html') }));
+$('#microphone-setup').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'microphone.open' }).then(result => {
+    if (!result?.ok) throw Error(result?.error || 'Không mở được trang cấp quyền micro');
+  }).catch(error => { $('#recording-error').textContent = error.message; });
+});
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type === 'recording.state' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('offscreen.html')) renderRecording({ ...message, ok: true });
 });

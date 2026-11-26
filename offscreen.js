@@ -76,7 +76,9 @@ export function createOffscreenRecorder({ chrome, store, recorderFactory, permis
       starting = true;
       canceled = false;
       try {
-        const permission = await permissions.query({ name: 'microphone' });
+        // A trusted visible helper can hand off a live permission grant before
+        // closing. getUserMedia below remains the final permission authority.
+        const permission = metadata.microphoneAuthorized ? { state: 'granted' } : await permissions.query({ name: 'microphone' });
         if (canceled) {
           overrideState = { status: 'idle' };
         } else if (permission.state !== 'granted') {

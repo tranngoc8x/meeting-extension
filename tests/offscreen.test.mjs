@@ -92,6 +92,13 @@ test('missing microphone permission never starts tab acquisition and is visible 
   assert.equal(status.active, false); assert.equal(f.starts(), 0);
 });
 
+test('trusted visible microphone handoff attempts real acquisition even when permission query remains prompt', async () => {
+  const f = fixture({ permission: 'prompt' });
+  const result = await f.router.handle(message('start', { metadata: { ...metadata, microphoneAuthorized: true } }), sender);
+  assert.equal(result.state.status, 'recording');
+  assert.equal(f.starts(), 1);
+});
+
 test('stop during a pending permission check cannot start capture after the check resolves', async () => {
   const f = fixture({ heldPermission: true });
   const first = f.router.handle(message('start', { metadata }), sender);

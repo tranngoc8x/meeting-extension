@@ -67,6 +67,7 @@ const recordingMessage = createRecordingService({
   runtimeId: chrome.runtime.id,
   getURL: path => chrome.runtime.getURL(path),
   openLibrary: () => chrome.tabs.create({ url: chrome.runtime.getURL('recordings.html') }),
+  openSettings: () => chrome.runtime.openOptionsPage(),
 });
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (!RECORDING_MESSAGES.has(message?.type)) return;
@@ -83,6 +84,23 @@ chrome.tabs.onRemoved.addListener(tabId => {
 // Offscreen owns the media; explicitly stop when its Meet document goes away.
 chrome.tabs.onUpdated?.addListener((tabId, change) => {
   if (change.status === 'loading') recordingController.tabNavigated(tabId).catch(() => {});
+});
+// The toolbar action itself grants tab access and starts recording; no popup or
+// second Record click sits between invocation and capture.
+chrome.action?.onClicked.addListener(async tab => {
+  const isMeet = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}(?:[/?#]|$)/.test(tab.url || '');
+  if (!isMeet) { await chrome.runtime.openOptionsPage(); return; }
+  try {
+    const status = await recordingController.status(tab.id);
+    if (status.active) await recordingController.stop(tab.id);
+    else await recordingController.start(tab);
+  } catch (error) {
+    const status = await recordingController.status(tab.id).catch(() => null);
+    // Preserve the Stop control when capture may still be active.
+    if (status && !status.active) chrome.tabs.sendMessage(tab.id, {
+      type: 'recording.state', ...status, state: { status: 'error', error: error.message },
+    }).catch(() => {});
+  }
 });
 chrome.commands?.onCommand.addListener((command, tab) => {
   if (command !== 'record-meeting') return;

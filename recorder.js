@@ -34,7 +34,7 @@
       if (current === session) {
         current = null;
         publish(session.failure
-          ? { status: 'error', id: session.id, error: session.failure }
+          ? { status: 'error', id: session.id, error: session.failure, ...(session.needsMicrophone ? { needsMicrophone: true } : {}) }
           : { status: session.persisted ? 'saved' : 'idle', id: session.persisted ? session.id : undefined });
       }
       session.resolveStopped?.();
@@ -103,6 +103,7 @@
             echoCancellation: true, noiseSuppression: true, autoGainControl: true,
           }, video: false });
         } catch {
+          session.needsMicrophone = true;
           throw new Error('Chưa được cấp quyền micro. Hãy cho phép micro để ghi cả giọng của bạn.');
         }
         if (session.canceled) { await finish(session); return; }

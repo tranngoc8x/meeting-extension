@@ -111,6 +111,7 @@ test('tab acquisition failure, missing tab sound and denied microphone never lea
     assert.deepEqual(result.messages, []);
     if (!options.cancel) assert.equal(result.displayStopped, true);
     if (!options.cancel) assert.ok(result.state.error);
+    if (options.micDenied) assert.equal(result.state.needsMicrophone, true);
   }
 });
 

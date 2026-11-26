@@ -1,5 +1,9 @@
 # Audio-only tab capture migration
 
+## UX correction — v0.4.1
+
+Tony rejected the extra popup/Record step and permission-page keep-open/manual-restart workflow. The toolbar action now directly toggles Meet capture. Settings move to the existing popup.html as an options tab, also accessible through a useful Settings control on the floating card. Idle card shows status; remove the guidance-only button. First-use microphone setup automatically requests browser permission, holds its acquired stream until the waiting offscreen recording is established, releases that setup stream and closes itself after acknowledgement. Resume only the original trusted pending tab/room, cancel stale/closed/navigated intents, and enforce actual getUserMedia permission even when the Permissions API reports prompt. Subsequent icon clicks start directly. Verify both journeys with a fresh native profile without globally pregranting microphone permission; earlier native coverage that pregranted permission does not establish first-use UX correctness. These requirements supersede the popup/start and manual permission-return flow below.
+
 Tony approved replacing the screen-sharing flow with chrome.tabCapture. The floating Meet card remains a prominent reminder/status/Stop control; starting uses the extension popup or a recording shortcut. Never fall back to getDisplayMedia or present a screen/window picker.
 
 ## Approach

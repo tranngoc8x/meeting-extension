@@ -4,11 +4,15 @@ import { createRecordingController } from '../recording-controller.js';
 
 const room = 'https://meet.google.com/abc-defg-hij';
 function fixture({ permission = 'granted' } = {}) {
-  const values = {}, messages = [], broadcasts = [], opened = [], interrupted = [];
+  const values = {}, localValues = {}, messages = [], broadcasts = [], opened = [], interrupted = [], activated = [];
+  const helpers = new Map();
   let exists = false, activeTab = { id: 7, url: room, title: 'Team sync', active: true }, streamCalls = 0;
   let snapshot = { state: { status: 'idle' }, active: false, tabId: null, meetingUrl: null, captureId: null };
   const chrome = {
-    storage: { session: { async get(key) { return { [key]: values[key] }; }, async set(data) { Object.assign(values, data); } } },
+    storage: {
+      session: { async get(key) { return structuredClone({ [key]: values[key] }); }, async set(data) { Object.assign(values, structuredClone(data)); }, async remove(key) { delete values[key]; } },
+      local: { async get(key) { return structuredClone({ [key]: localValues[key] }); }, async set(data) { Object.assign(localValues, structuredClone(data)); } },
+    },
     runtime: {
       id: 'extension', getURL: path => `chrome-extension://extension/${path}`,
       async getContexts() { return exists ? [{}] : []; },
@@ -32,7 +36,10 @@ function fixture({ permission = 'granted' } = {}) {
     tabCapture: { async getMediaStreamId(options) { assert.equal(options.targetTabId, activeTab.id); streamCalls++; return `stream-${streamCalls}`; } },
     commands: { async getAll() { return [{ name: 'record-meeting', shortcut: 'Alt+Shift+R' }]; } },
     tabs: {
-      async query() { return [activeTab]; }, async get() { return activeTab; }, async create(options) { opened.push(options); },
+      async query() { return [activeTab]; },
+      async get(id) { if (id === activeTab.id) return activeTab; if (helpers.has(id)) return helpers.get(id); throw Error('Tab closed'); },
+      async create(options) { opened.push(options); const helper = { id: 90 + opened.length, url: options.url }; helpers.set(helper.id, helper); return helper; },
+      async update(id, options) { activated.push({ id, ...options }); return { id }; },
       async sendMessage(tabId, message) {
         if (message.type === 'meet.status') return { inCall: true, meetingUrl: activeTab.url, title: activeTab.title };
         broadcasts.push({ tabId, message });
@@ -40,7 +47,7 @@ function fixture({ permission = 'granted' } = {}) {
     },
   };
   const make = () => createRecordingController(chrome, { interruptTab: async tabId => interrupted.push(tabId) });
-  return { chrome, make, messages, broadcasts, opened, interrupted, values,
+  return { chrome, make, messages, broadcasts, opened, interrupted, activated, values, localValues,
     streams: () => streamCalls, snapshot: () => snapshot,
     setActiveTab(tab) { activeTab = tab; }, setExists(value) { exists = value; },
   };
@@ -60,11 +67,158 @@ test('invoked start uses a fresh tab stream ID and offscreen USER_MEDIA; stop pr
   assert.equal(f.streams(), 2);
 });
 
-test('missing extension microphone permission opens setup without acquiring tab audio', async () => {
+test('missing microphone permission waits once then hands off original Meet capture after worker recreation', async () => {
   const f = fixture({ permission: 'prompt' });
-  await assert.rejects(f.make().start(), error => error.needsMicrophone === true);
+  const waiting = await f.make().start();
+  assert.equal(waiting.state.status, 'waiting-microphone');
+  assert.equal(waiting.active, false);
   assert.equal(f.streams(), 0);
   assert.deepEqual(f.opened, [{ url: 'chrome-extension://extension/microphone.html' }]);
+  const restarted = f.make();
+  await assert.rejects(restarted.microphoneReady(999), /permission|quyền|pending|chờ|Untrusted/i);
+  const result = await restarted.microphoneReady(91);
+  assert.equal(result.resumed, true);
+  assert.equal(result.state.status, 'recording');
+  assert.equal(f.streams(), 1);
+  assert.equal(f.messages.find(message => message.type === 'recording.offscreen.start').metadata.microphoneAuthorized, true);
+  assert.deepEqual(f.activated.at(-1), { id: 7, active: true });
+  await restarted.stop(7);
+  const repeat = await restarted.start();
+  assert.equal(repeat.state.status, 'recording');
+  assert.equal(f.opened.length, 1, 'subsequent invocation must not reopen permission UI');
+});
+
+test('microphone handoff never follows a changed room or a canceled original request', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make();
+  await controller.start();
+  f.setActiveTab({ id: 7, url: 'https://meet.google.com/xxx-yyyy-zzz', active: true });
+  await assert.rejects(controller.microphoneReady(91), /cuộc họp|room|changed/i);
+  assert.equal(f.streams(), 0);
+  const canceled = fixture({ permission: 'prompt' }), other = canceled.make();
+  await other.start();
+  await other.stop(7);
+  await assert.rejects(other.microphoneReady(91), /permission|quyền|pending|chờ|Untrusted/i);
+  assert.equal(f.streams(), 0);
+  assert.equal(canceled.streams(), 0);
+});
+
+test('microphone helper closed before granting cancels the pending request', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make();
+  await controller.start();
+  await controller.tabClosed(91);
+  assert.equal((await controller.status(7)).state.status, 'idle');
+  await assert.rejects(controller.microphoneReady(91));
+  assert.equal(f.streams(), 0);
+});
+
+test('Stop during helper registration cannot publish waiting or revive the canceled capture', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make(), create = f.chrome.tabs.create;
+  let releaseCreate;
+  f.chrome.tabs.create = async options => {
+    const helper = await create(options);
+    await new Promise(resolve => { releaseCreate = resolve; });
+    return helper;
+  };
+  const starting = controller.start();
+  while (!releaseCreate) await new Promise(resolve => setImmediate(resolve));
+  await controller.stop(7);
+  releaseCreate();
+  assert.equal((await starting).state.status, 'idle');
+  await assert.rejects(controller.microphoneReady(91));
+  assert.equal(f.streams(), 0);
+});
+
+test('fast automatic microphone ready waits for helper registration before validating its sender', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make(), create = f.chrome.tabs.create;
+  let releaseCreate;
+  f.chrome.tabs.create = async options => {
+    const helper = await create(options);
+    await new Promise(resolve => { releaseCreate = resolve; });
+    return helper;
+  };
+  const starting = controller.start();
+  while (!releaseCreate) await new Promise(resolve => setImmediate(resolve));
+  const ready = controller.microphoneReady(91).catch(error => ({ error: error.message }));
+  releaseCreate();
+  await starting;
+  assert.equal((await ready).state?.status, 'recording');
+  assert.equal(f.streams(), 1);
+});
+
+test('helper cancellation while target lookup is pending prevents a late queued capture', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make(), get = f.chrome.tabs.get;
+  await controller.start();
+  let releaseLookup, waiting = true;
+  f.chrome.tabs.get = async id => {
+    if (id === 7 && waiting) {
+      waiting = false;
+      await new Promise(resolve => { releaseLookup = resolve; });
+    }
+    return get(id);
+  };
+  const ready = controller.microphoneReady(91).catch(error => error);
+  while (!releaseLookup) await new Promise(resolve => setImmediate(resolve));
+  await controller.tabClosed(91);
+  releaseLookup();
+  assert.match((await ready).message, /cancel|hủy/i);
+  assert.equal(f.streams(), 0);
+  assert.equal(f.snapshot().active, false);
+});
+
+test('closing helper during offscreen acquisition stops the handoff before returning a canceled error', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make(), send = f.chrome.runtime.sendMessage;
+  await controller.start();
+  let releaseStart;
+  f.chrome.runtime.sendMessage = async message => {
+    const result = await send(message);
+    if (message.type === 'recording.offscreen.start') await new Promise(resolve => { releaseStart = resolve; });
+    return result;
+  };
+  const ready = controller.microphoneReady(91).catch(error => error);
+  while (!releaseStart) await new Promise(resolve => setImmediate(resolve));
+  await controller.tabClosed(91);
+  const stillActive = f.snapshot().active;
+  releaseStart();
+  assert.match((await ready).message, /cancel|hủy/i);
+  assert.equal(stillActive, false);
+  assert.equal(f.snapshot().active, false);
+});
+
+test('a replacement worker can identify and stop the handoff when its helper closes', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make(), send = f.chrome.runtime.sendMessage;
+  await controller.start();
+  let releaseStart;
+  f.chrome.runtime.sendMessage = async message => {
+    const result = await send(message);
+    if (message.type === 'recording.offscreen.start') await new Promise(resolve => { releaseStart = resolve; });
+    return result;
+  };
+  const ready = controller.microphoneReady(91).catch(error => error);
+  while (!releaseStart) await new Promise(resolve => setImmediate(resolve));
+  const replacement = f.make();
+  await replacement.tabClosed(91);
+  const stillActive = f.snapshot().active;
+  // Settle the abandoned worker's test RPC; only the replacement owns the event.
+  releaseStart(); await ready;
+  assert.equal(stillActive, false);
+});
+
+test('revoked microphone opens one recovery helper and a failed handoff never reopens helpers in a loop', async () => {
+  const f = fixture(), controller = f.make(), original = f.chrome.runtime.sendMessage;
+  await controller.start();
+  await controller.stop(7);
+  f.chrome.runtime.sendMessage = async message => {
+    if (message.type === 'recording.offscreen.start') return {
+      ok: true, active: false, tabId: 7, meetingUrl: room, captureId: message.metadata.captureId,
+      state: { status: 'error', error: 'Microphone permission revoked', needsMicrophone: true },
+    };
+    return original(message);
+  };
+  assert.equal((await controller.start()).state.status, 'waiting-microphone');
+  assert.equal(f.opened.length, 1);
+  await assert.rejects(controller.microphoneReady(91), /revoked/);
+  assert.equal(f.opened.length, 1, 'failed handoff must leave its own helper available for an explicit retry');
+  assert.equal(f.localValues['recording-microphone-ready'], false);
 });
 
 test('worker recreation reconciles an active offscreen recording instead of interrupting it', async () => {

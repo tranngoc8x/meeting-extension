@@ -6,8 +6,8 @@ const content = { id: 'extension', frameId: 0, documentId: 'document-1', tab: { 
 const popup = { id: 'extension', url: 'chrome-extension://extension/popup.html' };
 function fixture() {
   const calls = [];
-  const controller = Object.fromEntries(['start', 'stop', 'status', 'openMicrophone', 'onState'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
-  const handle = createRecordingService({ controller, runtimeId: 'extension', getURL: path => `chrome-extension://extension/${path}`, openLibrary: async () => { calls.push(['library']); } });
+  const controller = Object.fromEntries(['start', 'stop', 'status', 'openMicrophone', 'onState', 'microphoneReady'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
+  const handle = createRecordingService({ controller, runtimeId: 'extension', getURL: path => `chrome-extension://extension/${path}`, openLibrary: async () => { calls.push(['library']); }, openSettings: async () => { calls.push(['settings']); } });
   return { handle, calls };
 }
 test('only the invoked extension popup can start; content cannot upload chunks or spoof another tab', async () => {
@@ -40,4 +40,20 @@ test('state messages go through controller offscreen validation and never trigge
   const message = { target: 'background', type: 'recording.state', state: { status: 'recording' } };
   await f.handle(message, sender);
   assert.deepEqual(f.calls, [['onState', message, sender]]);
+});
+
+test('only the extension microphone helper can acknowledge acquisition, using its actual sender tab', async () => {
+  const f = fixture();
+  for (const sender of [content, popup, { id: 'other', frameId: 0, tab: { id: 91 }, url: 'chrome-extension://extension/microphone.html' }]) {
+    await assert.rejects(f.handle({ type: 'recording.microphone-ready', tabId: 7 }, sender));
+  }
+  await f.handle({ type: 'recording.microphone-ready', tabId: 7 }, { id: 'extension', frameId: 0, tab: { id: 91 }, url: 'chrome-extension://extension/microphone.html' });
+  assert.deepEqual(f.calls, [['microphoneReady', 91]]);
+});
+
+test('settings retain trusted extension controls as a tab and Meet can open settings', async () => {
+  const f = fixture();
+  await f.handle({ type: 'recording.status' }, { ...popup, tab: { id: 20 } });
+  await f.handle({ type: 'settings.open' }, content);
+  assert.deepEqual(f.calls, [['status'], ['settings']]);
 });
