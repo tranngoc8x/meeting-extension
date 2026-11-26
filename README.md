@@ -61,7 +61,7 @@ Giao diện tiện ích được thiết kế theo phong cách **Modern Enterpri
 
 - ⚡ **Zero-click In-Call Detection:** Tự động phát hiện khi bạn vào phòng họp Google Meet mà không cần bấm thêm bất cứ nút nào.
 - 🤖 **Tự động gọi Bot thông minh & Chống trùng lặp:** Gửi yêu cầu điều bot vào phòng họp tức thì (`POST /integrations/v1/in-call`). Hệ thống backend tự động bỏ qua nếu phòng họp đó đã có bot của người khác.
-- 🎙️ **Ghi âm cuộc họp:** Một lần bấm icon July bắt đầu ghi, bấm lại để dừng. Card nổi trong Meet hiển thị trạng thái, thời lượng và nút Dừng. Thu tiếng tab + micro thành một file WebM/Opus, lưu từng đoạn trong IndexedDB của extension. Có trang bản ghi để tải về và xóa file.
+- 🎙️ **Ghi âm cuộc họp:** Icon July mở popup điều khiển; popup và card nổi trong Meet đều có Ghi âm / Dừng. Thu tiếng tab + micro thành một file WebM/Opus, lưu từng đoạn trong IndexedDB của extension. Có trang bản ghi để tải về và xóa file.
 - 🔐 **Bảo mật tuyệt đối - Nguyên tắc đặc quyền tối thiểu (Least Privilege):**
   - Ghi âm bắt đầu sau khi người dùng gọi extension qua icon/phím tắt. Cần cấp quyền micro một lần trên trang riêng của July. Không sử dụng webcam.
   - `tabCapture` chỉ lấy audio của tab Meet, không gọi `getDisplayMedia`, không mở hộp chọn màn hình/cửa sổ và không thu video. Chrome vẫn có thể hiển thị chỉ báo tab đang được thu âm.
@@ -160,21 +160,21 @@ Google Meet liên tục cập nhật giao diện mà không có API công khai c
 3. **Cấu hình tiện ích:**
    - Sau khi cài đặt, sao chép **ID của tiện ích** (ví dụ: `abcdefghijklmnop...`).
    - Điền ID này vào cấu hình danh sách `EXTENSION_IDS` trên hệ thống máy chủ `meeting-scheduler` của bạn.
-   - Mở **Cài đặt July** từ card Meet, hoặc bấm icon July khi đang ở tab không phải Meet:
+   - Bấm icon July để mở popup điều khiển và tài khoản, hoặc mở **Cài đặt July** từ card Meet:
      - Nhấp **Kết nối Google** (hoặc **Kết nối bằng tài khoản dashboard**).
      - Trong mục **Cài đặt nâng cao**, kiểm tra địa chỉ backend (mặc định: `https://api.july.io.vn`, hoặc đổi thành `http://localhost:4000` nếu tự chạy máy chủ nội bộ).
 
 4. **Sử dụng:**
    - Truy cập vào bất kỳ cuộc họp Google Meet nào. Tiện ích sẽ tự động nhận diện và gửi bot tham gia.
 
-### Ghi âm cuộc họp (v0.4.1)
+### Ghi âm cuộc họp (v0.4.2)
 
 1. Reload extension trong `chrome://extensions`, rồi tải lại tab Meet đã mở.
 2. Tham gia phòng họp. Card nổi ở góc dưới bên phải sẽ nhắc cách bắt đầu. Ghim icon July trên thanh công cụ để dễ tìm.
-3. Bấm **icon July một lần** để bắt đầu ngay, bấm lại để dừng. Không có popup và không cần bấm thêm nút Ghi âm. Hoặc dùng `Alt+Shift+R` (Mac: Option+Shift+R); card hiển thị phím tắt thực tế Chrome đã gán. Nếu chưa được gán, đặt lại tại `chrome://extensions/shortcuts`.
-4. Lần đầu cần quyền micro, July tự mở trang yêu cầu quyền. Chọn **Cho phép** trong thông báo của Chrome: July tự bắt đầu ghi cuộc họp đang chờ, đóng trang quyền và trở lại Meet. Không phải giữ trang quyền mở hoặc bấm ghi âm lần nữa. Nếu từ chối, July hiện lỗi và nút thử lại. Không có hộp chọn chia sẻ màn hình.
-5. Bấm **Dừng ghi âm** trong card hoặc bấm lại icon/phím tắt để lưu. Extension cũng dừng khi tab đóng/tải lại/chuyển trang, nguồn thu kết thúc hoặc không còn nút rời cuộc họp khoảng 6 giây; chỉ ẩn thanh điều khiển không làm dừng ghi.
-6. Mở **Bản ghi trên máy** từ card để tải file theo tên cuộc họp + thời gian. Phần tài khoản/lịch quét nằm trong **Cài đặt July**, không chen vào thao tác ghi âm.
+3. Bấm **icon July** để mở popup điều khiển như trước, rồi chọn **Ghi âm**. Với tab Meet mới, thao tác mở popup cấp quyền thu tab cho extension; sau đó nút **Ghi âm** trên float cũng bắt đầu được và có thể dùng lại sau khi dừng. Nếu chưa gọi extension cho tab, float sẽ nhắc bấm icon July một lần trước khi thu. Hoặc dùng `Alt+Shift+R` (Mac: Option+Shift+R); card hiển thị phím tắt thực tế Chrome đã gán.
+4. Lần đầu cần quyền micro, July mở **cửa sổ popup nhỏ** (460×420), không mở tab cấu hình lớn. Chọn **Cho phép** trong thông báo Chrome: July tự bắt đầu ghi cuộc họp đang chờ, đóng cửa sổ quyền và trở lại Meet. Nếu từ chối, July hiện lỗi và nút thử lại. Không có hộp chọn chia sẻ màn hình.
+5. Bấm **Dừng ghi âm** từ popup hoặc float để lưu. Float cũng có **Ghi âm** để bắt đầu bản tiếp theo. Extension còn dừng khi tab đóng/tải lại/chuyển trang, nguồn thu kết thúc hoặc không còn nút rời cuộc họp khoảng 6 giây; chỉ ẩn thanh điều khiển không làm dừng ghi.
+6. Mở **Bản ghi trên máy** từ card hoặc popup để tải file theo tên cuộc họp + thời gian. Tài khoản/lịch quét vẫn có trong popup July; liên kết **Cài đặt** trên card mở giao diện đó trên trang riêng khi cần.
 
 Micro được thu riêng, **không đi theo nút mute của Meet**. Để kết thúc thu micro, bấm Dừng ghi âm. Nên dùng tai nghe để tránh tiếng loa lọt lại vào micro.
 
@@ -205,7 +205,7 @@ Kiểm thử native đầy đủ cần Chrome for Testing hiện tại hỗ tr�
 CAPTURE_BROWSER_EXECUTABLE="/path/to/Chrome for Testing executable" node --test tests/recording-integration.test.mjs
 ```
 
-Bài native dùng profile mới chưa được cấp quyền micro, gọi action thật của Chrome một lần, kiểm tra trang quyền tự đóng trong khi offscreen vẫn ghi, rồi kiểm tra lần bấm icon tiếp theo không mở lại trang quyền. Sau đó kiểm tra nguồn tab đã dừng, tải và giải mã WebM. Không dùng `--use-fake-ui-for-media-stream`: cờ đó can thiệp cả tab capture; harness chỉ tự chấp nhận camera/micro giả trong profile thử. Chrome for Testing 158 hỗ trợ bài này; Chromium kiểm thử cũ có thể thiếu API bảo vệ token `storage.local.setAccessLevel` dù hỗ trợ offscreen.
+Bài native dùng profile mới chưa được cấp quyền micro: float trước khi gọi extension bị chặn và không mở trang quyền; icon mở popup điều khiển, nút Ghi âm mở cửa sổ micro nhỏ tự đóng trong khi offscreen vẫn ghi. Sau đó kiểm tra float Dừng → Ghi âm lại mà không cần thêm icon/cửa sổ, nút Dừng trong popup, tải và giải mã WebM. Không dùng `--use-fake-ui-for-media-stream`: cờ đó can thiệp cả tab capture; harness chỉ tự chấp nhận camera/micro giả trong profile thử. Chrome for Testing 158 hỗ trợ bài này; Chromium kiểm thử cũ có thể thiếu API bảo vệ token `storage.local.setAccessLevel` dù hỗ trợ offscreen.
 
 ### Các kịch bản kiểm thử chính (Test Coverage)
 

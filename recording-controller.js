@@ -5,6 +5,15 @@ const ROOM = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 const BUSY = new Set(['starting', 'recording', 'saving']);
 const STATUSES = new Set(['idle', ...BUSY, 'waiting-microphone', 'saved', 'error']);
 const empty = () => ({ state: { status: 'idle' }, active: false, tabId: null, meetingUrl: null, captureId: null });
+function canonicalRoom(value) {
+  try {
+    const url = new URL(value), room = `${url.origin}${url.pathname.replace(/\/$/, '')}`;
+    return ROOM.test(room) ? room : null;
+  } catch { return null; }
+}
+function invocationRequired() {
+  return Object.assign(Error('Bấm icon July một lần để cấp quyền thu âm cho tab này.'), { needsInvocation: true });
+}
 
 export function createRecordingController(chrome, { interruptTab = async () => {} } = {}) {
   let current = empty(), loaded, queue = Promise.resolve(), publishing = Promise.resolve(), pendingStart = null, pendingMicrophone = null, microphoneRegistration = null;
@@ -84,17 +93,26 @@ export function createRecordingController(chrome, { interruptTab = async () => {
       const existing = pendingMicrophone;
       if (existing && existing.tabId === (target?.tabId ?? null) && existing.meetingUrl === (target?.meetingUrl ?? null)) {
         try {
-          await chrome.tabs.get(existing.helperTabId);
+          const helper = await chrome.tabs.get(existing.helperTabId);
           if (target?.canceled || pendingMicrophone !== existing) return false;
+          const windowId = helper.windowId ?? existing.helperWindowId;
+          if (Number.isInteger(windowId)) await chrome.windows.update(windowId, { focused: true });
           await chrome.tabs.update(existing.helperTabId, { active: true });
           return !target?.canceled && pendingMicrophone === existing;
-        } catch { if (pendingMicrophone === existing) await saveMicrophonePending(null); }
+        } catch {
+          if (pendingMicrophone !== existing) return false;
+          await saveMicrophonePending(null);
+        }
       }
       if (target?.canceled) return false;
-      const helper = await chrome.tabs.create({ url: chrome.runtime.getURL('microphone.html') });
+      const window = await chrome.windows.create({ url: chrome.runtime.getURL('microphone.html'), type: 'popup', width: 460, height: 420, focused: true });
+      const helper = window.tabs?.[0];
       if (!Number.isInteger(helper?.id)) throw Error('Không mở được trang cấp quyền micro.');
       if (!target?.canceled) {
-        await saveMicrophonePending({ tabId: target?.tabId ?? null, meetingUrl: target?.meetingUrl ?? null, helperTabId: helper.id });
+        await saveMicrophonePending({
+          tabId: target?.tabId ?? null, meetingUrl: target?.meetingUrl ?? null, documentId: target?.documentId ?? null,
+          helperTabId: helper.id, helperWindowId: window.id,
+        });
       }
       if (target?.canceled) {
         await saveMicrophonePending(null);
@@ -117,23 +135,35 @@ export function createRecordingController(chrome, { interruptTab = async () => {
     await publish({ ...attempt, active: false, state: { status: 'waiting-microphone', needsMicrophone: true } });
     return view();
   }
-  async function start(tab, { microphoneAuthorized = false, permissionHandoff = false, microphoneRequest = null } = {}) {
+  async function contentMeeting(target, expectedRoom, documentId) {
+    if (!target?.url) throw invocationRequired();
+    if (canonicalRoom(target.url) !== expectedRoom) throw Error('Trang Meet đã đổi phòng. Hãy bắt đầu lại trong cuộc họp hiện tại.');
+    let meeting;
+    try { meeting = await chrome.tabs.sendMessage(target.id, { type: 'meet.status' }, { documentId }); }
+    catch { throw Error('Trang Meet đã thay đổi. Hãy bắt đầu lại trong cuộc họp hiện tại.'); }
+    if (!meeting?.inCall || meeting.meetingUrl !== expectedRoom) throw Error('Tham gia đúng cuộc họp trước khi bắt đầu ghi âm.');
+    return meeting;
+  }
+  async function start(tab, { microphoneAuthorized = false, permissionHandoff = false, microphoneRequest = null, expectedRoom = null, documentId = null, contentInvocation = false } = {}) {
     const handoffCanceled = () => microphoneRequest && pendingMicrophone !== microphoneRequest;
     return enqueue(async () => {
       await sync();
       if (handoffCanceled()) throw Error('Microphone permission request was canceled');
       const target = tab ? (await chrome.tabs.get?.(tab.id) || tab) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+      if (contentInvocation && !target?.url) throw invocationRequired();
       let meetingUrl;
       try { const url = new URL(target?.url); meetingUrl = `${url.origin}${url.pathname.replace(/\/$/, '')}`; } catch { /* validated below */ }
       if (!Number.isInteger(target?.id) || !ROOM.test(meetingUrl)) throw Error('Mở tab Google Meet để ghi âm.');
+      if (expectedRoom && meetingUrl !== expectedRoom) throw Error('Trang Meet đã đổi phòng. Hãy bắt đầu lại trong cuộc họp hiện tại.');
+      let meeting = contentInvocation ? await contentMeeting(target, expectedRoom, documentId) : null;
       if (current.active) {
         if (current.tabId === target.id) return view();
         throw Error('Một tab Meet khác đang ghi âm. Hãy dừng bản ghi đó trước.');
       }
-      const meeting = await chrome.tabs.sendMessage(target.id, { type: 'meet.status' });
+      meeting ||= await chrome.tabs.sendMessage(target.id, { type: 'meet.status' });
       if (!meeting?.inCall || meeting.meetingUrl !== meetingUrl) throw Error('Tham gia cuộc họp trước khi bắt đầu ghi âm.');
       if (handoffCanceled()) throw Error('Microphone permission request was canceled');
-      const attempt = { tabId: target.id, meetingUrl, captureId: crypto.randomUUID(), canceled: false, dispatched: false, microphoneRequest };
+      const attempt = { tabId: target.id, meetingUrl, documentId, captureId: crypto.randomUUID(), canceled: false, dispatched: false, microphoneRequest };
       if (microphoneRequest) microphoneRequest.resumingCaptureId = attempt.captureId;
       pendingStart = attempt;
       try {
@@ -157,14 +187,25 @@ export function createRecordingController(chrome, { interruptTab = async () => {
           return view();
         }
         if (!knownMicrophone && permission.microphone !== 'granted') return await waitForMicrophone(attempt);
-        const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: target.id });
+        if (contentInvocation) await contentMeeting(await chrome.tabs.get(target.id), expectedRoom, documentId);
+        if (attempt.canceled || handoffCanceled()) {
+          await publish({ ...attempt, active: false, state: { status: 'idle' } });
+          return view();
+        }
+        let streamId;
+        try { streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: target.id }); }
+        catch (error) {
+          if (/Extension has not been invoked|activeTab/i.test(error.message || '')) throw invocationRequired();
+          throw error;
+        }
+        if (contentInvocation) await contentMeeting(await chrome.tabs.get(target.id), expectedRoom, documentId);
         if (attempt.canceled || handoffCanceled()) {
           await publish({ ...attempt, active: false, state: { status: 'idle' } });
           return view();
         }
         attempt.dispatched = true;
         const result = await request('start', { metadata: {
-          streamId, tabId: target.id, documentId: null, meetingUrl,
+          streamId, tabId: target.id, documentId, meetingUrl,
           title: String(meeting.title || target.title || meetingUrl.split('/').at(-1)).trim().slice(0, 200),
           captureId: attempt.captureId,
           ...(knownMicrophone ? { microphoneAuthorized: true } : {}),
@@ -183,10 +224,15 @@ export function createRecordingController(chrome, { interruptTab = async () => {
         }
         return view();
       } catch (error) {
-        await publish({ ...attempt, active: false, state: { status: 'error', error: error.message, ...(error.needsMicrophone ? { needsMicrophone: true } : {}) } });
+        await publish({ ...attempt, active: false, state: { status: 'error', error: error.message, ...(error.needsMicrophone ? { needsMicrophone: true } : {}), ...(error.needsInvocation ? { needsInvocation: true } : {}) } });
         throw error;
       } finally { if (pendingStart === attempt) pendingStart = null; }
     });
+  }
+  function startFromContent(tab, senderUrl, documentId) {
+    const expectedRoom = canonicalRoom(senderUrl);
+    if (!Number.isInteger(tab?.id) || tab.id < 0 || !expectedRoom || typeof documentId !== 'string' || !documentId) throw Error('Untrusted recording document');
+    return start({ id: tab.id }, { expectedRoom, documentId, contentInvocation: true });
   }
   async function stopFailure(error) {
     // Losing either status or stop responses does not prove media stopped.
@@ -262,11 +308,15 @@ export function createRecordingController(chrome, { interruptTab = async () => {
       await cancelMicrophone();
       throw Error('Cuộc họp đang chờ đã đóng hoặc đổi phòng.');
     }
-    const result = await start(target, { microphoneAuthorized: true, permissionHandoff: true, microphoneRequest: waiting });
+    const result = await start(target, {
+      microphoneAuthorized: true, permissionHandoff: true, microphoneRequest: waiting,
+      expectedRoom: waiting.meetingUrl, documentId: waiting.documentId ?? null, contentInvocation: Boolean(waiting.documentId),
+    });
     if (pendingMicrophone !== waiting) throw Error('Microphone permission request was canceled');
     if (!result.active || result.state.status !== 'recording') throw Error(result.state?.error || 'Không thể tiếp tục ghi âm cuộc họp.');
     await saveMicrophonePending(null);
     await chrome.tabs.update(target.id, { active: true });
+    if (Number.isInteger(target.windowId)) await chrome.windows.update(target.windowId, { focused: true });
     return { ...result, resumed: true };
   }
   async function tabClosed(tabId) {
@@ -280,5 +330,5 @@ export function createRecordingController(chrome, { interruptTab = async () => {
     }
     return ended(tabId);
   }
-  return { start, stop, status, onState, tabClosed, tabNavigated: ended, openMicrophone, microphoneReady };
+  return { start, startFromContent, stop, status, onState, tabClosed, tabNavigated: ended, openMicrophone, microphoneReady };
 }

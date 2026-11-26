@@ -16,6 +16,7 @@ async function fixture(t) {
       onMessage: { addListener: listener => stateListeners.push(listener), removeListener: listener => { stateListeners = stateListeners.filter(item => item !== listener); } },
       sendMessage: async message => {
         messages.push(message);
+        if (message.type === 'recording.start') return { ok: true, state: { status: 'recording', startedAt: new Date().toISOString() }, active: true, meetingUrl: 'https://meet.google.com/abc-defg-hij' };
         if (message.type === 'recording.stop') { stops++; return { ok: true, state: { status: 'saved' } }; }
         return { ok: true, state: { status: 'idle' }, shortcut: 'Alt+Shift+R' };
       },
@@ -27,14 +28,16 @@ async function fixture(t) {
   return page;
 }
 
-test('Meet card shows recording state and useful controls without an extra guidance-only button', async t => {
+test('Meet card starts and stops recording with a trusted click and ignores synthetic page clicks', async t => {
   const p = await fixture(t);
   assert.equal(await p.getByRole('button', { name: 'Cách bắt đầu ghi âm', exact: true }).count(), 0);
+  assert.equal(await p.getByRole('button', { name: 'Ghi âm', exact: true }).isDisabled(), true);
   await p.evaluate(() => panel.updateMeeting({ inCall: true, meetingUrl: 'https://meet.google.com/abc-defg-hij' }));
+  await p.evaluate(() => document.querySelector('#july-recording-panel').shadowRoot.querySelector('.primary').click());
   assert.equal(await p.evaluate(() => messages.some(message => message.type === 'recording.start')), false);
-  assert.match(await p.getByRole('status').textContent(), /icon July/);
   assert.match(await p.locator('#july-recording-panel').locator('.shortcut').textContent(), /Alt\+Shift\+R/);
-  await p.evaluate(() => emitState({ status: 'recording', startedAt: new Date().toISOString() }));
+  await p.getByRole('button', { name: 'Ghi âm', exact: true }).click();
+  assert.equal(await p.evaluate(() => messages.filter(message => message.type === 'recording.start').length), 1);
   await p.getByRole('button', { name: 'Dừng ghi âm' }).click();
   assert.equal(await p.evaluate(() => stops), 1);
   assert.equal(await p.getByRole('status').textContent(), 'Đã lưu trên máy · Chờ kết nối upload');

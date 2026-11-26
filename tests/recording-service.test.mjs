@@ -6,18 +6,24 @@ const content = { id: 'extension', frameId: 0, documentId: 'document-1', tab: { 
 const popup = { id: 'extension', url: 'chrome-extension://extension/popup.html' };
 function fixture() {
   const calls = [];
-  const controller = Object.fromEntries(['start', 'stop', 'status', 'openMicrophone', 'onState', 'microphoneReady'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
+  const controller = Object.fromEntries(['start', 'startFromContent', 'stop', 'status', 'openMicrophone', 'onState', 'microphoneReady'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
   const handle = createRecordingService({ controller, runtimeId: 'extension', getURL: path => `chrome-extension://extension/${path}`, openLibrary: async () => { calls.push(['library']); }, openSettings: async () => { calls.push(['settings']); } });
   return { handle, calls };
 }
-test('only the invoked extension popup can start; content cannot upload chunks or spoof another tab', async () => {
+test('trusted controls may start; content cannot upload chunks or spoof another tab', async () => {
   const f = fixture();
-  for (const sender of [content, { ...popup, id: 'other' }, { ...popup, url: 'chrome-extension://extension/recordings.html' }]) {
+  for (const sender of [{ ...content, frameId: 2 }, { ...popup, id: 'other' }, { ...popup, url: 'chrome-extension://extension/recordings.html' }]) {
     await assert.rejects(f.handle({ type: 'recording.start', tabId: 99 }, sender));
   }
   assert.equal(await f.handle({ type: 'recording.chunk' }, content), undefined);
   await f.handle({ type: 'recording.start', tabId: 99 }, popup);
   assert.deepEqual(f.calls, [['start']]);
+});
+
+test('floating Start uses only the actual sender tab, URL and document instead of caller-supplied identities', async () => {
+  const f = fixture();
+  await f.handle({ type: 'recording.start', tabId: 99, meetingUrl: 'https://meet.google.com/xxx-yyyy-zzz', documentId: 'spoofed' }, content);
+  assert.deepEqual(f.calls, [['startFromContent', { id: 7 }, room, 'document-1']]);
 });
 test('Meet status and stop always use sender tab identity and reject non-top-frame/untrusted messages', async () => {
   const f = fixture();

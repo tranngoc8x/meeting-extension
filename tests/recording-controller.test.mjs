@@ -4,7 +4,7 @@ import { createRecordingController } from '../recording-controller.js';
 
 const room = 'https://meet.google.com/abc-defg-hij';
 function fixture({ permission = 'granted' } = {}) {
-  const values = {}, localValues = {}, messages = [], broadcasts = [], opened = [], interrupted = [], activated = [];
+  const values = {}, localValues = {}, messages = [], broadcasts = [], opened = [], windowOpened = [], windowFocused = [], interrupted = [], activated = [], meetingRequests = [];
   const helpers = new Map();
   let exists = false, activeTab = { id: 7, url: room, title: 'Team sync', active: true }, streamCalls = 0;
   let snapshot = { state: { status: 'idle' }, active: false, tabId: null, meetingUrl: null, captureId: null };
@@ -35,19 +35,35 @@ function fixture({ permission = 'granted' } = {}) {
     offscreen: { async createDocument(options) { assert.deepEqual(options.reasons, ['USER_MEDIA']); exists = true; } },
     tabCapture: { async getMediaStreamId(options) { assert.equal(options.targetTabId, activeTab.id); streamCalls++; return `stream-${streamCalls}`; } },
     commands: { async getAll() { return [{ name: 'record-meeting', shortcut: 'Alt+Shift+R' }]; } },
+    windows: {
+      async create(options) {
+        windowOpened.push(options);
+        // Keep the allocation hook used by registration-race tests while
+        // matching windows.create's real return shape.
+        const helper = await chrome.tabs.create({ url: options.url });
+        const tab = { ...helper, windowId: 200 + windowOpened.length };
+        helpers.set(tab.id, tab);
+        return { id: tab.windowId, type: options.type, tabs: [tab] };
+      },
+      async update(id, options) { windowFocused.push({ id, ...options }); },
+    },
     tabs: {
       async query() { return [activeTab]; },
       async get(id) { if (id === activeTab.id) return activeTab; if (helpers.has(id)) return helpers.get(id); throw Error('Tab closed'); },
       async create(options) { opened.push(options); const helper = { id: 90 + opened.length, url: options.url }; helpers.set(helper.id, helper); return helper; },
       async update(id, options) { activated.push({ id, ...options }); return { id }; },
-      async sendMessage(tabId, message) {
-        if (message.type === 'meet.status') return { inCall: true, meetingUrl: activeTab.url, title: activeTab.title };
+      async sendMessage(tabId, message, options) {
+        if (message.type === 'meet.status') {
+          meetingRequests.push({ tabId, options });
+          if (options?.documentId && options.documentId !== 'document-1') throw Error('No document receiver');
+          return { inCall: true, meetingUrl: activeTab.url, title: activeTab.title };
+        }
         broadcasts.push({ tabId, message });
       },
     },
   };
   const make = () => createRecordingController(chrome, { interruptTab: async tabId => interrupted.push(tabId) });
-  return { chrome, make, messages, broadcasts, opened, interrupted, activated, values, localValues,
+  return { chrome, make, messages, broadcasts, opened, windowOpened, windowFocused, meetingRequests, interrupted, activated, values, localValues,
     streams: () => streamCalls, snapshot: () => snapshot,
     setActiveTab(tab) { activeTab = tab; }, setExists(value) { exists = value; },
   };
@@ -74,6 +90,7 @@ test('missing microphone permission waits once then hands off original Meet capt
   assert.equal(waiting.active, false);
   assert.equal(f.streams(), 0);
   assert.deepEqual(f.opened, [{ url: 'chrome-extension://extension/microphone.html' }]);
+  assert.deepEqual(f.windowOpened, [{ url: 'chrome-extension://extension/microphone.html', type: 'popup', width: 460, height: 420, focused: true }]);
   const restarted = f.make();
   await assert.rejects(restarted.microphoneReady(999), /permission|quyền|pending|chờ|Untrusted/i);
   const result = await restarted.microphoneReady(91);
@@ -86,6 +103,57 @@ test('missing microphone permission waits once then hands off original Meet capt
   const repeat = await restarted.start();
   assert.equal(repeat.state.status, 'recording');
   assert.equal(f.opened.length, 1, 'subsequent invocation must not reopen permission UI');
+});
+
+test('repeated invocation focuses the existing bounded microphone popup instead of opening a full tab', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make();
+  await controller.start();
+  await controller.start();
+  assert.equal(f.windowOpened.length, 1);
+  assert.deepEqual(f.windowFocused.at(-1), { id: 201, focused: true });
+});
+
+test('floating Start without tab invocation rejects before opening microphone UI or acquiring audio', async () => {
+  const f = fixture({ permission: 'prompt' }), controller = f.make();
+  f.setActiveTab({ id: 7, active: true });
+  await assert.rejects(controller.startFromContent({ id: 7 }, room, 'document-1'), error => error.needsInvocation === true && /icon July/.test(error.message));
+  assert.equal(f.windowOpened.length, 0);
+  assert.equal(f.opened.length, 0);
+  assert.equal(f.streams(), 0);
+});
+
+test('invoked floating Start is bound to the sender document and canonical room', async () => {
+  const f = fixture(), controller = f.make();
+  const result = await controller.startFromContent({ id: 7 }, `${room}?authuser=1`, 'document-1');
+  assert.equal(result.state.status, 'recording');
+  assert.ok(f.meetingRequests.every(request => request.tabId === 7 && request.options?.documentId === 'document-1'));
+  assert.equal(f.messages.find(message => message.type === 'recording.offscreen.start').metadata.documentId, 'document-1');
+});
+
+test('a stale floating document or room cannot start a replacement meeting', async () => {
+  for (const [url, documentId] of [[room, 'old-document'], ['https://meet.google.com/xxx-yyyy-zzz', 'document-1']]) {
+    const f = fixture({ permission: 'prompt' }), controller = f.make();
+    await assert.rejects(controller.startFromContent({ id: 7 }, url, documentId), /trang|phòng|cuộc họp|document/i);
+    assert.equal(f.windowOpened.length, 0);
+    assert.equal(f.streams(), 0);
+  }
+});
+
+test('room change during permission checks is revalidated before acquiring a tab stream', async () => {
+  const f = fixture(), controller = f.make(), send = f.chrome.runtime.sendMessage;
+  f.chrome.runtime.sendMessage = async message => {
+    if (message.type === 'recording.offscreen.permissions') f.setActiveTab({ id: 7, url: 'https://meet.google.com/xxx-yyyy-zzz', active: true });
+    return send(message);
+  };
+  await assert.rejects(controller.startFromContent({ id: 7 }, room, 'document-1'), /phòng|cuộc họp|trang/i);
+  assert.equal(f.streams(), 0);
+});
+
+test('native tabCapture invocation rejection becomes a clear floating-control error', async () => {
+  const f = fixture(), controller = f.make();
+  f.chrome.tabCapture.getMediaStreamId = async () => { throw Error('Extension has not been invoked for the current page (see activeTab permission)'); };
+  await assert.rejects(controller.startFromContent({ id: 7 }, room, 'document-1'), error => error.needsInvocation === true && /icon July/.test(error.message));
+  assert.equal(f.broadcasts.at(-1).message.state.needsInvocation, true);
 });
 
 test('microphone handoff never follows a changed room or a canceled original request', async () => {

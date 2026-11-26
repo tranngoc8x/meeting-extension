@@ -8,3 +8,4 @@ article{background:white;border:1px solid #e0e4ec;padding:22px;border-radius:14p
 button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #849bff;outline-offset:2px}.download{color:white;background:#b8233c;border-color:#b8233c}#error{color:#b8233c}#error:empty{display:none}
 @media(prefers-color-scheme:dark){:root{color:#e8edf5;background:#15191f}article,button{background:#222730;border-color:#3c4452}.download{background:#b8233c}.intro,.meta,.room{color:#b4bfd0}.status{background:#2b364c;color:#c7d8ff}.warning{color:#ffc49c}#error{color:#ffacb9}}
 @media(max-width:500px){main{padding:24px 14px}h1{font-size:23px}article{padding:16px}}
+.microphone-setup main{max-width:460px;padding:24px}.microphone-setup h1{font-size:22px;letter-spacing:-.3px}.microphone-setup .intro{font-size:13px;margin:12px 0}

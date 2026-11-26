@@ -35,7 +35,7 @@
       </style>
       <section class="panel" aria-label="July ghi âm cuộc họp">
         <header><span>July · Ghi âm</span><button class="quiet collapse" type="button" aria-label="Thu gọn">−</button></header>
-        <button class="primary" type="button" hidden><span class="dot" aria-hidden="true"></span><span class="label">Dừng ghi âm</span></button>
+        <button class="primary" type="button" disabled><span class="dot" aria-hidden="true"></span><span class="label">Ghi âm</span></button>
         <p class="help"><span class="shortcut"></span> Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
         <p class="status" role="status">Vào cuộc họp để bắt đầu ghi âm</p>
         <p class="error" role="alert"></p>
@@ -47,9 +47,9 @@
     const active = () => captureActive || ['starting', 'recording', 'saving'].includes(state.status);
     function render() {
       const busy = state.status === 'saving';
-      $('.primary').hidden = !active();
-      $('.primary').disabled = busy || (!active() && !meeting.inCall);
-      const label = busy ? 'Đang lưu…' : state.status === 'starting' ? 'Hủy ghi âm' : 'Dừng ghi âm';
+      const waiting = state.status === 'waiting-microphone';
+      $('.primary').disabled = busy || (!active() && !waiting && !meeting.inCall);
+      const label = busy ? 'Đang lưu…' : state.status === 'starting' || waiting ? 'Hủy ghi âm' : active() ? 'Dừng ghi âm' : 'Ghi âm';
       $('.label').textContent = label;
       $('.primary').setAttribute('aria-label', label);
       $('.error').textContent = state.error || '';
@@ -57,13 +57,13 @@
         starting: 'Đang bắt đầu ghi âm…', recording: 'Đang ghi âm · Tiếng tab + micro',
         saving: 'Đang lưu bản ghi trên máy…', saved: 'Đã lưu trên máy · Chờ kết nối upload',
         'waiting-microphone': 'Đang chờ quyền micro · Sẽ tự bắt đầu ghi âm sau khi cho phép',
-        error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
-      })[state.status] || (meeting.inCall ? 'Bấm icon July để bắt đầu ghi âm' : 'Vào cuộc họp để bắt đầu ghi âm');
+        error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : state.needsInvocation ? 'Cần cấp quyền thu âm cho tab này một lần' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
+      })[state.status] || (meeting.inCall ? 'Sẵn sàng ghi âm' : 'Vào cuộc họp để bắt đầu ghi âm');
       $('.primary').title = state.status === 'recording' ? 'Dừng và lưu bản ghi' : label;
     }
     function apply(result) {
       if (disposed) return;
-      if (!result?.ok) throw Error(result?.error || 'Không đọc được trạng thái ghi âm');
+      if (!result?.ok) throw Object.assign(Error(result?.error || 'Không đọc được trạng thái ghi âm'), { needsInvocation: Boolean(result?.needsInvocation) });
       state = result.state || { status: 'idle' };
       captureActive = Boolean(result.active);
       recordingRoom = result.meetingUrl || recordingRoom;
@@ -71,7 +71,7 @@
       if (state.status !== 'recording') absentSince = null;
       render();
     }
-    function showError(error) { if (!disposed) { state = { status: 'error', error: error.message }; render(); } }
+    function showError(error) { if (!disposed) { state = { status: 'error', error: error.message, ...(error.needsInvocation ? { needsInvocation: true } : {}) }; render(); } }
     function onMessage(message, sender) {
       if (message?.type !== 'recording.state' || sender.id !== chrome.runtime.id) return;
       receivedState = true;
@@ -83,8 +83,14 @@
       state = { ...state, status: 'saving' }; render();
       chrome.runtime.sendMessage({ type: 'recording.stop' }).then(apply).catch(showError);
     }
-    $('.primary').addEventListener('click', () => {
-      if (active()) { stop(); return; }
+    $('.primary').addEventListener('click', event => {
+      // Page scripts can reach the shared DOM, but cannot manufacture a trusted
+      // user click to activate the microphone after tab permission was granted.
+      if (!event.isTrusted) return;
+      if (active() || state.status === 'waiting-microphone') { stop(); return; }
+      if (!meeting.inCall) return;
+      state = { status: 'starting' }; render();
+      chrome.runtime.sendMessage({ type: 'recording.start' }).then(apply).catch(showError);
     });
     $('.collapse').addEventListener('click', () => $('.panel').classList.add('compact'));
     $('.expand').addEventListener('click', () => $('.panel').classList.remove('compact'));

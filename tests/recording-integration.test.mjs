@@ -9,7 +9,7 @@ import { chromium } from 'playwright';
 
 // Actual extension/action/offscreen; fresh profile, synthetic tab + fake mic.
 // No global permission pregrant: exercise the first-use handoff itself.
-test('one toolbar click hands off microphone once, then records without keeping setup open', { skip: !process.env.CAPTURE_BROWSER_EXECUTABLE }, async t => {
+test('native July popup and floating controls both start and stop with a small one-time mic window', { skip: !process.env.CAPTURE_BROWSER_EXECUTABLE }, async t => {
   const root = fileURLToPath(new URL('../', import.meta.url));
   const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url)));
   const extensionId = createHash('sha256').update(Buffer.from(manifest.key, 'base64')).digest('hex').slice(0, 32).replace(/[0-9a-f]/g, c => String.fromCharCode(97 + parseInt(c, 16)));
@@ -48,6 +48,13 @@ test('one toolbar click hands off microphone once, then records without keeping 
   const downloads = join(profile, 'downloads');
   await mkdir(downloads);
   await protocol.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: downloads, eventsEnabled: true });
+  const helper = await context.newPage();
+  await helper.goto(`chrome-extension://${extensionId}/recordings.html`);
+  await meeting.bringToFront();
+  await worker.evaluate(() => {
+    globalThis.createdMicWindows = [];
+    chrome.windows.onCreated.addListener(window => createdMicWindows.push({ type: window.type, width: window.width, height: window.height }));
+  });
   async function clickIcon() {
     await meeting.bringToFront();
     const { targetInfos } = await protocol.send('Target.getTargets', { filter: [{ type: 'tab' }] });
@@ -55,28 +62,49 @@ test('one toolbar click hands off microphone once, then records without keeping 
     assert.ok(target);
     await protocol.send('Extensions.triggerAction', { id: extensionId, targetId: target.targetId });
   }
+  async function clickPopupRecording(label) {
+    let ready = false;
+    for (let attempt = 0; attempt < 50 && !ready; attempt++) {
+      ready = await helper.evaluate(expected => {
+        const button = chrome.extension.getViews({ type: 'popup' })[0]?.document.querySelector('#recording-toggle');
+        return Boolean(button && !button.disabled && button.textContent === expected);
+      }, label);
+      if (!ready) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    assert.equal(ready, true, `July popup must expose ${label}`);
+    await helper.evaluate(() => chrome.extension.getViews({ type: 'popup' })[0].document.querySelector('#recording-toggle').click());
+  }
   let openedPages = 0;
   context.on('page', () => { openedPages++; });
-  const setupOpened = context.waitForEvent('page', { timeout: 10000 });
+  await meeting.getByRole('button', { name: 'Ghi âm', exact: true }).click();
+  await meeting.getByRole('alert').filter({ hasText: /icon July/ }).waitFor();
+  assert.equal(openedPages, 0, 'uninvoked float cannot open mic setup or capture silently');
   await clickIcon();
+  assert.equal(openedPages, 0, 'icon opens the native control popup, not a new tab');
+  assert.equal((await worker.evaluate(() => chrome.tabCapture.getCapturedTabs())).some(tab => tab.status === 'active'), false);
+  const setupOpened = context.waitForEvent('page', { timeout: 10000 });
+  await clickPopupRecording('Ghi âm');
   const setup = await setupOpened;
   if (!setup.isClosed()) await setup.waitForEvent('close', { timeout: 15000 });
   assert.match(setup.url(), /\/microphone\.html$/);
+  const windows = await worker.evaluate(() => createdMicWindows);
+  assert.ok(windows.some(window => window.type === 'popup' && window.width <= 600 && window.height <= 600), 'microphone setup must use a bounded popup window');
   await meeting.getByRole('button', { name: 'Dừng ghi âm', exact: true }).waitFor();
   await meeting.waitForTimeout(1500);
   assert.equal((await worker.evaluate(() => chrome.tabCapture.getCapturedTabs())).filter(tab => tab.status === 'active').length, 1);
   assert.equal(setup.isClosed(), true, 'capture must not require the setup page to remain open');
   await meeting.getByRole('button', { name: 'Dừng ghi âm', exact: true }).click();
   await meeting.getByRole('status').filter({ hasText: 'Đã lưu trên máy' }).waitFor();
-  assert.equal(openedPages, 1, 'first use opens only the one-time permission helper, no action popup');
-  await clickIcon();
+  assert.equal(openedPages, 1, 'first use opens only the one-time mic popup window');
+  await meeting.getByRole('button', { name: 'Ghi âm', exact: true }).click();
   await meeting.getByRole('button', { name: 'Dừng ghi âm', exact: true }).waitFor();
-  assert.equal(openedPages, 1, 'next icon click starts directly after the helper has closed');
+  assert.equal(openedPages, 1, 'floating Start reuses the tab grant without another icon or window');
   await meeting.waitForTimeout(1200);
   await clickIcon();
+  await clickPopupRecording('Dừng ghi âm');
   await meeting.getByRole('status').filter({ hasText: 'Đã lưu trên máy' }).waitFor();
   assert.equal((await worker.evaluate(() => chrome.tabCapture.getCapturedTabs())).some(tab => tab.status === 'active'), false);
-  await meeting.screenshot({ path: '/tmp/meeting-one-click-panel.png' });
+  await meeting.screenshot({ path: '/tmp/meeting-float-start-panel.png' });
   const library = await context.newPage();
   await library.goto(`chrome-extension://${extensionId}/recordings.html`);
   const files = library.locator('article').filter({ hasText: 'Tab audio integration' });

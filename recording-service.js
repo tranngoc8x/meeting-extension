@@ -1,6 +1,6 @@
 export const RECORDING_MESSAGES = new Set(['recording.start', 'recording.stop', 'recording.status', 'recording.state', 'recording.microphone-ready', 'recordings.open', 'microphone.open', 'settings.open']);
 
-/** Runtime trust boundary. Meet pages can observe/stop their own capture, never start it. */
+/** Meet controls are scoped to their sender tab/document; Chrome enforces capture invocation. */
 export function createRecordingService({ controller, runtimeId, getURL, openLibrary, openSettings }) {
   return async function handle(message, sender) {
     if (!RECORDING_MESSAGES.has(message?.type)) return;
@@ -17,8 +17,7 @@ export function createRecordingService({ controller, runtimeId, getURL, openLibr
       && Boolean(sender.documentId) && Number.isInteger(sender.tab?.id) && sender.tab.id >= 0 && meet;
     if (!popup && !content) throw Error('Untrusted recording sender');
     if (message.type === 'recording.start') {
-      if (!popup) throw Error('Bắt đầu ghi âm bằng icon July hoặc phím tắt.');
-      return controller.start();
+      return popup ? controller.start() : controller.startFromContent({ id: sender.tab.id }, sender.url, sender.documentId);
     }
     if (message.type === 'recording.status') return popup ? controller.status() : controller.status(sender.tab.id);
     if (message.type === 'recording.stop') return popup ? controller.stop() : controller.stop(sender.tab.id);
