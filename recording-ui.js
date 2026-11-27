@@ -36,7 +36,7 @@
       <section class="panel" aria-label="July ghi âm cuộc họp">
         <header><span>July · Ghi âm</span><button class="quiet collapse" type="button" aria-label="Thu gọn">−</button></header>
         <button class="primary" type="button" disabled><span class="dot" aria-hidden="true"></span><span class="label">Ghi âm</span></button>
-        <p class="help">Tab mới: bấm icon July để ghi lần đầu, sau đó có thể ghi/dừng tại đây. <span class="shortcut"></span> Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
+        <p class="help">Âm thanh chỉ lấy từ micro. Khi tắt mic trên Meet, đoạn đó sẽ im lặng. <span class="shortcut"></span></p>
         <p class="status" role="status">Vào cuộc họp để bắt đầu ghi âm</p>
         <p class="error" role="alert"></p>
         <footer><span class="timer">00:00</span><button class="quiet files" type="button">Bản ghi trên máy</button><button class="quiet settings" type="button" aria-label="Cài đặt July">Cài đặt</button></footer>
@@ -54,8 +54,8 @@
       $('.primary').setAttribute('aria-label', label);
       $('.error').textContent = state.error || '';
       $('.status').textContent = ({
-        starting: 'Đang bắt đầu ghi âm…', recording: 'Đang ghi âm · Tiếng tab + micro',
-        saving: 'Đang lưu bản ghi trên máy…', saved: 'Đã lưu trên máy · Chờ kết nối upload',
+        starting: 'Đang bắt đầu ghi âm…', recording: 'Đang ghi âm · Chỉ micro',
+        saving: 'Đang lưu bản ghi trên máy…', saved: 'Đã lưu trên máy',
         'waiting-microphone': 'Đang chờ quyền micro · Sẽ tự bắt đầu ghi âm sau khi cho phép',
         error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : state.needsInvocation ? 'Bấm icon July để ghi lần đầu trên tab này' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
       })[state.status] || (meeting.inCall ? 'Sẵn sàng ghi âm' : 'Vào cuộc họp để bắt đầu ghi âm');
@@ -120,7 +120,14 @@
     document.documentElement.append(host);
     render();
     return {
-      updateMeeting(next) { meeting = next; render(); },
+      updateMeeting(next) {
+        const muteChanged = next?.micMuted !== undefined && next.micMuted !== meeting.micMuted;
+        meeting = next;
+        if (muteChanged && state.status === 'recording') {
+          chrome.runtime.sendMessage({ type: 'recording.microphone-muted', muted: next.micMuted }).catch(() => {});
+        }
+        render();
+      },
       dispose() {
         disposed = true;
         clearInterval(ticker);

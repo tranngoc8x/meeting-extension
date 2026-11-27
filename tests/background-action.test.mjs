@@ -22,7 +22,12 @@ test('toolbar directly starts and stops recording; settings controls remain avai
         return { ok: true, ...snapshot };
       },
     },
-    action: { onClicked: { addListener: listener => { onAction = listener; } } },
+    action: {
+      onClicked: { addListener: listener => { onAction = listener; } },
+      setBadgeText: async value => { calls.push(['badge', value.text]); },
+      setBadgeBackgroundColor: async value => { calls.push(['badge-color', value.color]); },
+      setTitle: async value => { calls.push(['title', value.title]); },
+    },
     commands: { onCommand: event(), getAll: async () => [] },
     offscreen: { createDocument: async () => { exists = true; } },
     tabCapture: { getMediaStreamId: async () => 'tab-stream' },
@@ -39,9 +44,11 @@ test('toolbar directly starts and stops recording; settings controls remain avai
   await onAction(tab);
   assert.equal(calls.filter(type => type === 'recording.offscreen.start').length, 1);
   assert.equal(snapshot.active, true);
+  assert.ok(calls.some(call => call[0] === 'badge' && call[1] === '●'));
   await onAction(tab);
   assert.equal(calls.filter(type => type === 'recording.offscreen.stop').length, 1);
   assert.equal(snapshot.active, false);
+  assert.ok(calls.some(call => call[0] === 'badge' && call[1] === ''));
   await rpc('settings.open');
   assert.equal(calls.filter(type => type === 'settings').length, 1);
 });

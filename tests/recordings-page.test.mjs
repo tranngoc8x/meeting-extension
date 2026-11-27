@@ -34,7 +34,7 @@ test('local library downloads persisted bytes safely and does not allow deleting
   const file = p.locator('article').filter({ hasText: 'Team sync' });
   await file.waitFor();
   assert.equal(await file.locator('img').count(), 0);
-  assert.equal(await file.getByText('Chờ kết nối upload', { exact: true }).count(), 1);
+  assert.equal(await file.getByText('Đã lưu trên máy', { exact: true }).count(), 1);
   const active = p.locator('article').filter({ hasText: 'In progress' });
   assert.equal(await active.getByRole('button', { name: 'Xóa' }).isDisabled(), true);
   assert.equal(await active.getByRole('button', { name: 'Tải về' }).isDisabled(), true);

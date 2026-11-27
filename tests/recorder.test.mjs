@@ -14,10 +14,10 @@ async function fixture(t, options = {}) {
   await page.route('https://meet.google.com/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Meet fixture</title>' }));
   await page.goto('https://meet.google.com/abc-defg-hij');
   await page.evaluate(options => {
-    window.messages = []; window.states = []; window.streams = []; window.displayCalls = 0;
+    window.messages = []; window.states = []; window.streams = []; window.displayCalls = 0; window.userMediaCalls = 0;
     const track = kind => {
       const value = new EventTarget();
-      Object.assign(value, { kind, readyState: 'live', stop() { this.readyState = 'ended'; } });
+      Object.assign(value, { kind, readyState: 'live', enabled: true, stop() { this.readyState = 'ended'; } });
       return value;
     };
     window.makeStream = (audio = true, video = true) => {
@@ -27,6 +27,7 @@ async function fixture(t, options = {}) {
     };
     window.displayStream = makeStream(!options.noAudio, false);
     window.microphoneStream = makeStream(true, false);
+    window.replacementMicrophoneStream = makeStream(true, false);
     const mediaDevices = {
       getDisplayMedia() { throw new Error('Screen sharing must never be requested'); },
       getUserMedia(constraints) {
@@ -36,8 +37,10 @@ async function fixture(t, options = {}) {
           if (options.pending) return new Promise(resolve => { window.resolvePicker = () => resolve(displayStream); });
           return Promise.resolve(displayStream);
         }
+        window.userMediaCalls++;
         if (options.pendingMic) return new Promise(resolve => { window.resolveMicrophone = () => resolve(microphoneStream); });
-        return options.micDenied ? Promise.reject(new DOMException('Denied', 'NotAllowedError')) : Promise.resolve(microphoneStream);
+        if (options.micDenied) return Promise.reject(new DOMException('Denied', 'NotAllowedError'));
+        return Promise.resolve(options.replacementMic && window.userMediaCalls > 1 ? replacementMicrophoneStream : microphoneStream);
       },
     };
     Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
@@ -98,6 +101,39 @@ test('recording consumes audio-only tab stream ID, restores only tab playback, a
   assert.deepEqual(result.messages.filter(m => m.type === 'recording.chunk').map(m => [m.sequence, atob(m.data)]), [[0, 'first'], [1, 'second'], [2, 'final']]);
   assert.equal(result.state.status, 'saved');
   assert.equal(result.stopped, true); assert.equal(result.contextsClosed, true);
+});
+
+test('microphone-only mode never opens tab audio and mute gates the microphone track', async t => {
+  const page = await fixture(t);
+  const result = await page.evaluate(async () => {
+    await recorder.start({ ...metadata, microphoneOnly: true, microphoneMuted: false });
+    const track = microphoneStream.getAudioTracks()[0];
+    const before = { displayCalls, enabled: track.enabled, encodedAudioTracks: encodedStream.getAudioTracks().length, encodedIsMic: encodedStream === microphoneStream };
+    recorder.setMicrophoneMuted(true);
+    const muted = track.enabled;
+    recorder.setMicrophoneMuted(false);
+    const unmuted = track.enabled;
+    await recorder.stop();
+    return { before, muted, unmuted };
+  });
+  assert.deepEqual(result.before, { displayCalls: 0, enabled: true, encodedAudioTracks: 1, encodedIsMic: false });
+  assert.equal(result.muted, false);
+  assert.equal(result.unmuted, true);
+});
+
+test('microphone-only recording reacquires a replacement device when the original mic ends', async t => {
+  const page = await fixture(t, { replacementMic: true });
+  const result = await page.evaluate(async () => {
+    await recorder.start({ ...metadata, microphoneOnly: true });
+    microphoneStream.getAudioTracks()[0].dispatchEvent(new Event('ended'));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const state = recorder.getState();
+    await recorder.stop();
+    return { state, userMediaCalls, replacementEnabled: replacementMicrophoneStream.getAudioTracks()[0].enabled };
+  });
+  assert.equal(result.state.status, 'recording');
+  assert.equal(result.userMediaCalls, 2);
+  assert.equal(result.replacementEnabled, true);
 });
 
 test('tab acquisition failure, missing tab sound and denied microphone never leave capture tracks running', async t => {

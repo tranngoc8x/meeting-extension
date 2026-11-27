@@ -43,9 +43,52 @@
       session.failure ||= error?.message || 'Không thể tiếp tục ghi âm.';
       void stop();
     }
+    function connectMicrophone(session) {
+      const source = session.context.createMediaStreamSource(new MediaStream(session.mic.getAudioTracks()));
+      source.connect(session.destination);
+      session.micSource = source;
+      session.sources.push(source);
+    }
+    async function recoverMicrophone(session) {
+      if (session.recovering || session.canceled || session.finishing) return;
+      session.recovering = true;
+      for (let attempt = 0; attempt < 10 && !session.canceled && !session.finishing; attempt++) {
+        try {
+          const replacement = await navigator.mediaDevices.getUserMedia({ audio: {
+            echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+          }, video: false });
+          if (session.canceled || session.finishing) {
+            replacement.getTracks().forEach(track => track.stop());
+            break;
+          }
+          if (!replacement.getAudioTracks().some(track => track.readyState === 'live')) {
+            replacement.getTracks().forEach(track => track.stop());
+            throw new Error('Micro chưa sẵn sàng.');
+          }
+          session.mic = replacement;
+          replacement.getAudioTracks().forEach(track => { track.enabled = !session.microphoneMuted; });
+          connectMicrophone(session);
+          watchTracks(session, replacement, true);
+          session.recovering = false;
+          publish({ status: 'recording', id: session.id, startedAt: session.startedAt });
+          return;
+        } catch {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      session.recovering = false;
+      if (!session.canceled && !session.finishing) {
+        session.failure = 'Micro đã ngắt kết nối và chưa tìm thấy thiết bị thay thế.';
+        await stop();
+      }
+    }
     function watchTracks(session, stream, microphone = false) {
       for (const track of stream.getTracks()) {
         const listener = () => {
+          if (microphone && session.microphoneOnly && session.started) {
+            void recoverMicrophone(session);
+            return;
+          }
           if (microphone || !session.started) {
             session.failure ||= microphone
               ? 'Micro đã ngắt kết nối. Bản ghi đã dừng.'
@@ -58,6 +101,13 @@
       }
     }
     function ensureLiveInputs(session) {
+      if (session.microphoneOnly) {
+        if (session.mic && (!session.mic.getAudioTracks().some(track => track.readyState === 'live')
+          || session.mic.getAudioTracks().some(track => track.readyState !== 'live'))) {
+          throw new Error('Micro đã ngắt kết nối trước khi ghi âm bắt đầu. Hãy kiểm tra thiết bị và thử lại.');
+        }
+        return;
+      }
       if (!session.display.getAudioTracks().some(track => track.readyState === 'live')
         || session.display.getTracks().some(track => track.readyState !== 'live')) {
         throw new Error('Âm thanh tab đã kết thúc trước khi ghi âm bắt đầu. Hãy thử lại.');
@@ -91,13 +141,15 @@
     }
     async function startSession(session, displayPromise, metadata) {
       try {
-        session.display = await displayPromise;
-        if (session.canceled) { await finish(session); return; }
-        if (!session.display.getAudioTracks().some(track => track.readyState === 'live')) {
-          throw new Error('Không thu được âm thanh tab Meet. Hãy bấm icon July để thử lại.');
+        if (!session.microphoneOnly) {
+          session.display = await displayPromise;
+          if (session.canceled) { await finish(session); return; }
+          if (!session.display.getAudioTracks().some(track => track.readyState === 'live')) {
+            throw new Error('Không thu được âm thanh tab Meet. Hãy bấm icon July để thử lại.');
+          }
+          ensureLiveInputs(session);
+          watchTracks(session, session.display);
         }
-        ensureLiveInputs(session);
-        watchTracks(session, session.display);
         try {
           session.mic = await navigator.mediaDevices.getUserMedia({ audio: {
             echoCancellation: true, noiseSuppression: true, autoGainControl: true,
@@ -112,16 +164,19 @@
         }
         ensureLiveInputs(session);
         watchTracks(session, session.mic, true);
+        if (metadata.microphoneMuted === true) {
+          session.mic.getAudioTracks().forEach(track => { track.enabled = false; });
+        }
         session.context = new AudioContext();
-        // One mixed track, with no route from the microphone to the speakers.
-        const destination = session.context.createMediaStreamDestination();
-        session.output = destination.stream;
-        for (const input of [session.display, session.mic]) {
-          const source = session.context.createMediaStreamSource(new MediaStream(input.getAudioTracks()));
-          source.connect(destination);
-          // tabCapture diverts the tab's normal playback. Restore only the tab;
-          // routing the microphone here would create feedback.
-          if (input === session.display) source.connect(session.context.destination);
+        // Route only microphone audio into the recording output. For tab capture
+        // compatibility, the legacy mixed branch still restores tab playback.
+        session.destination = session.context.createMediaStreamDestination();
+        session.output = session.destination.stream;
+        connectMicrophone(session);
+        if (!session.microphoneOnly) {
+          const source = session.context.createMediaStreamSource(new MediaStream(session.display.getAudioTracks()));
+          source.connect(session.destination);
+          source.connect(session.context.destination);
           session.sources.push(source);
         }
         if (session.context.state === 'suspended') await session.context.resume();
@@ -155,11 +210,13 @@
     function start(metadata) {
       if (current) return current.starting;
       const session = { id: crypto.randomUUID(), queue: Promise.resolve(), pending: 0, sequence: 0,
-        listeners: [], sources: [], canceled: false, persisted: false };
+        listeners: [], sources: [], canceled: false, persisted: false,
+        microphoneOnly: Boolean(metadata?.microphoneOnly) };
       current = session;
       publish({ status: 'starting' });
       let displayPromise;
-      try {
+      if (metadata?.microphoneOnly) displayPromise = Promise.resolve(null);
+      else try {
         if (typeof metadata?.streamId !== 'string' || !metadata.streamId) throw Error('Thiếu quyền thu âm tab. Hãy bấm icon July để bắt đầu.');
         displayPromise = navigator.mediaDevices.getUserMedia({
           audio: { mandatory: { chromeMediaSource: 'tab', chromeMediaSourceId: metadata.streamId } },
@@ -187,7 +244,13 @@
       catch (error) { session.failure ||= error.message; void finish(session); }
       return session.stopping;
     }
-    return { start, stop, getState: () => ({ ...state }) };
+    function setMicrophoneMuted(muted) {
+      if (!current?.mic) return false;
+      current.microphoneMuted = Boolean(muted);
+      current.mic.getAudioTracks().forEach(track => { track.enabled = !current.microphoneMuted; });
+      return true;
+    }
+    return { start, stop, setMicrophoneMuted, getState: () => ({ ...state }) };
   }
   globalThis.MeetingRecorder = { create };
 })();

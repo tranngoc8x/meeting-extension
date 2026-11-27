@@ -1,4 +1,4 @@
-export const RECORDING_MESSAGES = new Set(['recording.start', 'recording.stop', 'recording.status', 'recording.state', 'recording.microphone-ready', 'recordings.open', 'microphone.open', 'settings.open']);
+export const RECORDING_MESSAGES = new Set(['recording.start', 'recording.stop', 'recording.status', 'recording.state', 'recording.microphone-ready', 'recording.microphone-muted', 'recordings.open', 'microphone.open', 'settings.open']);
 
 /** Meet controls are scoped to their sender tab/document; Chrome enforces capture invocation. */
 export function createRecordingService({ controller, runtimeId, getURL, openLibrary, openSettings }) {
@@ -21,6 +21,10 @@ export function createRecordingService({ controller, runtimeId, getURL, openLibr
     }
     if (message.type === 'recording.status') return popup ? controller.status() : controller.status(sender.tab.id);
     if (message.type === 'recording.stop') return popup ? controller.stop() : controller.stop(sender.tab.id);
+    if (message.type === 'recording.microphone-muted') {
+      if (!content) throw Error('Untrusted microphone state sender');
+      return controller.setMicrophoneMuted(sender.tab.id, Boolean(message.muted));
+    }
     if (message.type === 'microphone.open') {
       if (!popup) throw Error('Untrusted microphone permission request');
       await controller.openMicrophone();

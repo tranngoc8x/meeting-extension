@@ -6,7 +6,7 @@ const content = { id: 'extension', frameId: 0, documentId: 'document-1', tab: { 
 const popup = { id: 'extension', url: 'chrome-extension://extension/popup.html' };
 function fixture() {
   const calls = [];
-  const controller = Object.fromEntries(['start', 'startFromContent', 'stop', 'status', 'openMicrophone', 'onState', 'microphoneReady'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
+  const controller = Object.fromEntries(['start', 'startFromContent', 'stop', 'setMicrophoneMuted', 'status', 'openMicrophone', 'onState', 'microphoneReady'].map(name => [name, async (...args) => { calls.push([name, ...args]); return { ok: true, state: { status: 'idle' } }; }]));
   const handle = createRecordingService({ controller, runtimeId: 'extension', getURL: path => `chrome-extension://extension/${path}`, openLibrary: async () => { calls.push(['library']); }, openSettings: async () => { calls.push(['settings']); } });
   return { handle, calls };
 }
@@ -33,6 +33,11 @@ test('Meet status and stop always use sender tab identity and reject non-top-fra
   await f.handle({ type: 'recording.status', tabId: 99 }, content);
   await f.handle({ type: 'recording.stop', tabId: 99 }, content);
   assert.deepEqual(f.calls, [['status', 7], ['stop', 7]]);
+});
+test('Meet mute updates only the active recording microphone', async () => {
+  const f = fixture();
+  await f.handle({ type: 'recording.microphone-muted', muted: true }, content);
+  assert.deepEqual(f.calls, [['setMicrophoneMuted', 7, true]]);
 });
 test('popup can stop global recording/open permissions; library is available from trusted Meet', async () => {
   const f = fixture();

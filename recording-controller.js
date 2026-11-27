@@ -205,7 +205,8 @@ export function createRecordingController(chrome, { interruptTab = async () => {
         }
         attempt.dispatched = true;
         const result = await request('start', { metadata: {
-          streamId, tabId: target.id, documentId, meetingUrl,
+          microphoneOnly: true, microphoneMuted: meeting.micMuted === true, streamId,
+          tabId: target.id, documentId, meetingUrl,
           title: String(meeting.title || target.title || meetingUrl.split('/').at(-1)).trim().slice(0, 200),
           captureId: attempt.captureId,
           ...(knownMicrophone ? { microphoneAuthorized: true } : {}),
@@ -265,6 +266,12 @@ export function createRecordingController(chrome, { interruptTab = async () => {
       } catch (error) { return stopFailure(error); }
       return view(tabId);
     });
+  }
+  async function setMicrophoneMuted(tabId, muted) {
+    await load();
+    if (!current.active || (Number.isInteger(tabId) && current.tabId !== tabId)) return view(tabId);
+    await request('microphone-muted', { muted: Boolean(muted) });
+    return view(tabId);
   }
   async function onState(message, sender) {
     if (sender.id !== chrome.runtime.id || sender.url !== offscreenUrl || sender.tab) throw Error('Untrusted recording state');
@@ -330,5 +337,5 @@ export function createRecordingController(chrome, { interruptTab = async () => {
     }
     return ended(tabId);
   }
-  return { start, startFromContent, stop, status, onState, tabClosed, tabNavigated: ended, openMicrophone, microphoneReady };
+  return { start, startFromContent, stop, setMicrophoneMuted, status, onState, tabClosed, tabNavigated: ended, openMicrophone, microphoneReady };
 }

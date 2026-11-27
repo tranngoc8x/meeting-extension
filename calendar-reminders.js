@@ -1,5 +1,6 @@
 export const REMINDER_ALARM = 'calendar-reminders';
 export const REMINDER_MINUTES_KEY = 'calendarReminderMinutes';
+export const REMINDER_STATUS_KEY = 'calendarReminderStatus';
 export const DEFAULT_REMINDER_MINUTES = 5;
 export const MIN_REMINDER_MINUTES = 1;
 export const MAX_REMINDER_MINUTES = 10;

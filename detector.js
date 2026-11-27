@@ -35,12 +35,24 @@
       return [...button.querySelectorAll('.google-symbols,.material-icons,[data-google-symbol]')]
         .some(icon => (icon.getAttribute('data-google-symbol') || icon.textContent.trim()) === 'call_end');
     }
+    function microphoneMuted(buttons) {
+      for (const button of buttons) {
+        if (!visible(button)) continue;
+        const label = button.getAttribute('aria-label')?.trim().toLowerCase() || '';
+        if (/turn on microphone|unmute|bật micr?ô|bật micro|bật microphone/.test(label)) return true;
+        if (/turn off microphone|mute|tắt micr?ô|tắt micro|tắt microphone/.test(label)) return false;
+      }
+      return null;
+    }
     function check() {
       stats.checks++;
       const meetingUrl = normalizeUrl(getUrl());
-      const inCall = Boolean(meetingUrl && root && [...root.querySelectorAll(BUTTON)].some(b => isLeave(b) && visible(b)));
-      const changed = inCall !== state.inCall || (inCall && meetingUrl !== state.meetingUrl);
-      state = { inCall, meetingUrl, detectedAt: changed ? new Date().toISOString() : state.detectedAt };
+      const buttons = root ? [...root.querySelectorAll(BUTTON)] : [];
+      const inCall = Boolean(meetingUrl && buttons.some(b => isLeave(b) && visible(b)));
+      const micMuted = microphoneMuted(buttons);
+      const changed = inCall !== state.inCall || (micMuted !== null && micMuted !== state.micMuted)
+        || (inCall && meetingUrl !== state.meetingUrl);
+      state = { inCall, meetingUrl, ...(micMuted === null && state.micMuted === undefined ? {} : { micMuted }), detectedAt: changed ? new Date().toISOString() : state.detectedAt };
       if (changed) onTransition({ ...state });
     }
     function schedule() {

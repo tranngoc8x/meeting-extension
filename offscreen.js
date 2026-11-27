@@ -2,7 +2,7 @@ import { createRecordingStore } from './recording-store.js';
 
 const ROOM = /^https:\/\/meet\.google\.com\/[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 const ACTIVE = new Set(['starting', 'recording', 'saving']);
-const TYPES = new Set(['recording.offscreen.start', 'recording.offscreen.stop', 'recording.offscreen.status', 'recording.offscreen.permissions']);
+const TYPES = new Set(['recording.offscreen.start', 'recording.offscreen.stop', 'recording.offscreen.status', 'recording.offscreen.permissions', 'recording.offscreen.microphone-muted']);
 
 /** Owns capture and persistence independently of the service worker's lifetime. */
 export function createOffscreenRecorder({ chrome, store, recorderFactory, permissions = navigator.permissions }) {
@@ -51,7 +51,7 @@ export function createOffscreenRecorder({ chrome, store, recorderFactory, permis
   function validateMetadata(value) {
     if (!value || !Number.isInteger(value.tabId) || value.tabId < 0
       || typeof value.captureId !== 'string' || !value.captureId || value.captureId.length > 200
-      || typeof value.streamId !== 'string' || !value.streamId || value.streamId.length > 4096
+      || (!value.microphoneOnly && (typeof value.streamId !== 'string' || !value.streamId || value.streamId.length > 4096))
       || !ROOM.test(value.meetingUrl) || typeof value.title !== 'string') throw Error('Invalid capture metadata');
   }
   return {
@@ -67,6 +67,10 @@ export function createOffscreenRecorder({ chrome, store, recorderFactory, permis
       if (message.type === 'recording.offscreen.stop') {
         if (starting) canceled = true;
         await recorder.stop();
+        return snapshot();
+      }
+      if (message.type === 'recording.offscreen.microphone-muted') {
+        recorder.setMicrophoneMuted(Boolean(message.muted));
         return snapshot();
       }
       validateMetadata(message.metadata);

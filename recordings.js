@@ -3,7 +3,7 @@ const store = createRecordingStore();
 const $ = selector => document.querySelector(selector);
 const PAGE_SIZE = 20;
 let records = [], currentPage = 1;
-const statuses = { recording: 'Đang ghi âm', 'pending-upload': 'Chờ kết nối upload', interrupted: 'Ghi âm bị gián đoạn' };
+const statuses = { recording: 'Đang ghi âm', 'pending-upload': 'Đã lưu trên máy', interrupted: 'Ghi âm bị gián đoạn' };
 function element(tag, text, className) {
   const node = document.createElement(tag);
   node.textContent = text;

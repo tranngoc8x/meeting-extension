@@ -40,7 +40,7 @@ test('Meet card starts and stops recording with a trusted click and ignores synt
   assert.equal(await p.evaluate(() => messages.filter(message => message.type === 'recording.start').length), 1);
   await p.getByRole('button', { name: 'Dừng ghi âm' }).click();
   assert.equal(await p.evaluate(() => stops), 1);
-  assert.equal(await p.getByRole('status').textContent(), 'Đã lưu trên máy · Chờ kết nối upload');
+  assert.equal(await p.getByRole('status').textContent(), 'Đã lưu trên máy');
   await p.getByRole('button', { name: 'Bản ghi trên máy' }).click();
   assert.equal(await p.evaluate(() => messages.at(-1).type), 'recordings.open');
   await p.getByRole('button', { name: 'Cài đặt July' }).click();

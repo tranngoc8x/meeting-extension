@@ -206,6 +206,15 @@ async function loadServerSchedule() {
   try { showSchedule((await api(local, 'GET', '/api/me')).schedule); }
   catch (error) { $('#conn-error').textContent = error.message; await renderConnection(); }
 }
+async function loadReminderStatus() {
+  try {
+    const status = await chrome.runtime.sendMessage({ type: 'calendar.reminders.status' });
+    if (!status?.checkedAt) return;
+    if (status.code === 'notifications_denied' || status.code === 'api_error' || status.code === 'not_connected') {
+      scheduleStatus(status.message, 'bad');
+    }
+  } catch { /* service worker may not be ready yet */ }
+}
 form.addEventListener('submit', async event => {
   event.preventDefault();
   try {
@@ -217,7 +226,10 @@ form.addEventListener('submit', async event => {
     await chrome.storage.sync.set({ [REMINDER_MINUTES_KEY]: reminderMinutes });
     const connected = Boolean((await getConnection(local)).token);
     if (connected) await api(local, 'PUT', '/api/settings', schedule);
-    scheduleStatus(connected ? 'Đã lưu và đồng bộ' : 'Đã lưu trên máy', 'ok');
+    if (connected) {
+      const status = await chrome.runtime.sendMessage({ type: 'calendar.reminders.sync' });
+      scheduleStatus(status?.message || (status?.notified ? 'Đã bật nhắc lịch' : 'Đã lưu · Chưa tới thời điểm nhắc'), status?.ok === false ? 'bad' : 'ok');
+    } else scheduleStatus('Đã lưu trên máy · Cần đăng nhập để nhắc lịch', 'ok');
   } catch (error) {
     scheduleStatus(error.message, 'bad');
   }
@@ -235,5 +247,6 @@ form.addEventListener('submit', async event => {
   showSchedule(await loadSchedule(chrome.storage.sync));
   form.reminderMinutes.value = String(await loadReminderMinutes());
   if (connected) await loadServerSchedule();
+  if (connected) await loadReminderStatus();
   refresh();
 })();
