@@ -1,5 +1,6 @@
 import { recordTransition, tabKey } from './events.js';
-import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect, migrateLegacyBackend } from './backend.js';
+import { DASHBOARD_AUTHORIZE_PATH, api, backendStatusKey, connect, disconnect, getConnection, migrateLegacyBackend } from './backend.js';
+import { REMINDER_ALARM, clearCalendarReminders, syncCalendarReminders } from './calendar-reminders.js';
 import { loadSchedule } from './schedule.js';
 import { createRecordingStore } from './recording-store.js';
 import { createRecordingService, RECORDING_MESSAGES } from './recording-service.js';
@@ -13,9 +14,63 @@ function enqueue(operation) {
 }
 const ready = chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
 ready.catch(() => {});
+
+function scheduleCalendarReminders() {
+  chrome.alarms?.create?.(REMINDER_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
+}
+scheduleCalendarReminders();
+
+export async function pollCalendarReminders() {
+  const notifications = chrome.notifications;
+  if (!notifications?.create) return;
+  const { token } = await getConnection(chrome.storage.local);
+  if (!token) return;
+  const reminderMinutes = (await chrome.storage.sync.get('calendarReminderMinutes')).calendarReminderMinutes;
+  const result = await syncCalendarReminders({
+    storage: chrome.storage.local,
+    reminderMinutes,
+    apiFn: () => api(chrome.storage.local, 'GET', '/api/meetings'),
+    notifications: {
+      create: async (id, options) => {
+        if (options.data?.meetUrl) {
+          await chrome.storage.local.set({ [`calendar-notification-url:${id}`]: options.data.meetUrl });
+        }
+        return notifications.create(id, options);
+      },
+    },
+  });
+  if (result.error && !(await getConnection(chrome.storage.local)).token) {
+    await clearCalendarReminders(chrome.storage.local, chrome.alarms);
+  }
+}
+
+let reminderPollQueue = Promise.resolve();
+function queueCalendarReminderPoll() {
+  reminderPollQueue = reminderPollQueue.then(() => pollCalendarReminders()).catch(() => {});
+  return reminderPollQueue;
+}
+
+chrome.alarms?.onAlarm?.addListener(alarm => {
+  if (alarm?.name === REMINDER_ALARM) queueCalendarReminderPoll();
+});
+chrome.notifications?.onClicked?.addListener(notificationId => {
+  (async () => {
+    const key = `calendar-notification-url:${notificationId}`;
+    const saved = (await chrome.storage.local.get(key))[key];
+    if (saved) await chrome.tabs.create({ url: saved });
+    await chrome.storage.local.remove(key);
+  })().catch(() => {});
+});
 // Updating from a localhost-default build: point the extension at the server.
-chrome.runtime.onInstalled.addListener(() => { enqueue(() => migrateLegacyBackend(chrome.storage.local)).catch(() => {}); });
-/** A new in-call transition: ask the backend for a bot. It deduplicates rooms that already have one. */
+chrome.runtime.onInstalled.addListener(() => {
+  enqueue(() => migrateLegacyBackend(chrome.storage.local)).catch(() => {});
+  scheduleCalendarReminders();
+});
+/*
+ * Bot dispatch is intentionally paused while recording is handled locally by
+ * the extension. Keep this implementation here for a later portal/bot phase.
+ */
+/*
 async function requestBot(tabId, event) {
   let status;
   try {
@@ -25,6 +80,7 @@ async function requestBot(tabId, event) {
   }
   await chrome.storage.local.set({ [backendStatusKey(tabId)]: { meetingUrl: event.meetingUrl, status, at: new Date().toISOString() } });
 }
+*/
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   // Extension pages only (popup), never content scripts running on Meet.
   if (sender.id !== chrome.runtime.id || !sender.url?.startsWith(chrome.runtime.getURL(''))) return;
@@ -33,12 +89,16 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       .then(async connection => {
         // Push the locally chosen scan schedule so the backend uses it from the first scan.
         await api(chrome.storage.local, 'PUT', '/api/settings', await loadSchedule(chrome.storage.sync)).catch(() => {});
+        scheduleCalendarReminders();
         respond({ ok: true, email: connection.email });
       }, error => respond({ ok: false, error: error.message }));
     return true;
   }
   if (message?.type === 'backend.disconnect') {
-    disconnect(chrome.storage.local).then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message }));
+    disconnect(chrome.storage.local).then(async () => {
+      await clearCalendarReminders(chrome.storage.local, chrome.alarms);
+      respond({ ok: true });
+    }, error => respond({ ok: false, error: error.message }));
     return true;
   }
 });
@@ -56,7 +116,8 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   }).then(event => {
     respond({ok:true,event});
     // Same requestId = a new transition, not a retry/reload of one already reported.
-    if (event.inCall && event.requestId === message.event.requestId) requestBot(sender.tab.id, event).catch(() => {});
+    // Bot dispatch is paused for the local-recording phase.
+    // if (event.inCall && event.requestId === message.event.requestId) requestBot(sender.tab.id, event).catch(() => {});
   }, () => respond({ok:false,error:'Local event could not be saved'}));
   return true;
 });
@@ -85,16 +146,20 @@ chrome.tabs.onRemoved.addListener(tabId => {
 chrome.tabs.onUpdated?.addListener((tabId, change) => {
   if (change.status === 'loading') recordingController.tabNavigated(tabId).catch(() => {});
 });
-chrome.commands?.onCommand.addListener((command, tab) => {
-  if (command !== 'record-meeting') return;
-  (async () => {
+function toggleRecording(tab) {
+  return (async () => {
     const status = await recordingController.status();
-    if (status.active) await recordingController.stop();
+    if (status.active || status.state.status === 'waiting-microphone') await recordingController.stop();
     else await recordingController.start(tab);
   })().catch(() => {}); // controller publishes actionable errors to the Meet card.
+}
+chrome.action.onClicked.addListener(toggleRecording);
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command === 'record-meeting') return toggleRecording(tab);
 });
 // Tab IDs are not durable across browser sessions. Reload within a session keeps ID.
 chrome.runtime.onStartup.addListener(() => {
+  scheduleCalendarReminders();
   enqueue(async () => {
     const data = await chrome.storage.local.get(null);
     await chrome.storage.local.remove(Object.keys(data).filter(k => k.startsWith('meet-detection:') || k.startsWith('meet-backend:')));

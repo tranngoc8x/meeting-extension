@@ -1,20 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DASHBOARD_AUTHORIZE_PATH, api, connect, getConnection, normalizeBackendUrl, openDashboard, setBackendUrl } from '../backend.js';
+import { DASHBOARD_AUTHORIZE_PATH, api, connect, getConnection, openDashboard } from '../backend.js';
 function storage() {
  const data = {};
  return { data, get: async key => ({ [key]: structuredClone(data[key]) }), set: async values => Object.assign(data, structuredClone(values)) };
 }
-test('backend URL is validated, defaults to localhost, and changing it drops the token', async () => {
- assert.equal(normalizeBackendUrl(' https://bot.urbox.dev/ '), 'https://bot.urbox.dev');
- for (const bad of ['ftp://x', 'not a url', 'https://u:p@x', 'https://x/?q=1']) assert.throws(() => normalizeBackendUrl(bad));
+test('backend URL is fixed to the July API', async () => {
  const s = storage();
  assert.equal((await getConnection(s)).backendUrl, 'https://api.july.io.vn');
- s.data.backendConnection = { backendUrl: 'http://localhost:4000', token: 't', email: 'e' };
- await setBackendUrl(s, 'http://localhost:4000/');
- assert.equal((await getConnection(s)).token, 't');
- await setBackendUrl(s, 'https://other.example');
- assert.equal((await getConnection(s)).token, null);
+ s.data.backendConnection = { backendUrl: 'https://other.example', token: 't', email: 'e' };
+ assert.deepEqual(await getConnection(s), { backendUrl: 'https://api.july.io.vn', token: 't', email: 'e' });
 });
 test('connect reads token/email from the redirect fragment, or surfaces the error', async () => {
  const s = storage();
@@ -31,7 +26,7 @@ test('connect reads token/email from the redirect fragment, or surfaces the erro
 test('api sends the bearer token; a 401 disconnects', async () => {
  const s = storage();
  s.data.backendConnection = { backendUrl: 'http://b', token: 'tok', email: 'e' };
- const ok = async (url, init) => { assert.equal(url, 'http://b/api/me'); assert.equal(init.headers.authorization, 'Bearer tok'); return new Response('{"email":"e"}', { status: 200 }); };
+ const ok = async (url, init) => { assert.equal(url, 'https://api.july.io.vn/api/me'); assert.equal(init.headers.authorization, 'Bearer tok'); return new Response('{"email":"e"}', { status: 200 }); };
  assert.deepEqual(await api(s, 'GET', '/api/me', undefined, ok), { email: 'e' });
  await assert.rejects(api(s, 'GET', '/api/me', undefined, async () => new Response('{}', { status: 401 })), /kết nối lại/);
  assert.equal((await getConnection(s)).token, null);
@@ -58,7 +53,7 @@ test('openDashboard exchanges the token for a one-time link and opens it; 401 di
  const opened = [];
  const tabs = { create: async props => { opened.push(props); } };
  const ok = async (url, init) => {
-  assert.equal(url, 'http://b/dashboard/v2/auth/extension-code');
+  assert.equal(url, 'https://api.july.io.vn/dashboard/v2/auth/extension-code');
   assert.equal(init.method, 'POST');
   assert.equal(init.headers.authorization, 'Bearer tok');
   assert.equal(init.headers['content-type'], 'application/json');
@@ -66,7 +61,7 @@ test('openDashboard exchanges the token for a one-time link and opens it; 401 di
   return new Response('{"url":"/dashboard/v2/auth/extension?code=c1"}', { status: 200 });
  };
  await openDashboard(s, tabs, ok);
- assert.deepEqual(opened, [{ url: 'http://b/dashboard/v2/auth/extension?code=c1' }]);
+ assert.deepEqual(opened, [{ url: 'https://api.july.io.vn/dashboard/v2/auth/extension?code=c1' }]);
  for (const bad of ['//evil.example/x', 'https://evil.example/x', '@evil.example', undefined]) {
   await assert.rejects(openDashboard(s, tabs, async () => Response.json({ url: bad })), /không hợp lệ/);
  }
@@ -83,7 +78,7 @@ test('legacy localhost backend migrates to the server and drops its token', asyn
   assert.equal(await migrateLegacyBackend(legacy), true);
   assert.deepEqual(legacy.data.backendConnection, { backendUrl: DEFAULT_BACKEND_URL });
   const custom = store({ backendConnection: { backendUrl: 'https://staging.example.invalid', token: 't' } });
-  assert.equal(await migrateLegacyBackend(custom), false);
-  assert.equal(custom.data.backendConnection.token, 't');
+  assert.equal(await migrateLegacyBackend(custom), true);
+  assert.deepEqual(custom.data.backendConnection, { backendUrl: DEFAULT_BACKEND_URL });
   assert.equal(await migrateLegacyBackend(store({})), false);
 });

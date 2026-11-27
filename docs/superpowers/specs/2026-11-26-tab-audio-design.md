@@ -1,5 +1,11 @@
 # Audio-only tab capture migration
 
+## Current approved UX — v0.4.3 (meet-ext-c88)
+
+Tony selected the reference extension's one-click toolbar action after comparing the extra July steps. The icon directly starts/stops capture; do not open the control popup first. Keep actual Start/Stop on the floating card so recording can be controlled on Meet after the first native toolbar/shortcut invocation grants tab access. Chrome still blocks uninvoked content-script capture; explain this in the card before the user tries. Microphone consent is separate: retain the small automatic helper on first use/revocation, without any manual return/restart step. Settings/account UI stays available through card Settings and extension options. No display picker, new recording format, backend contract or upload change. This supersedes the v0.4.2 interaction below.
+
+Approaches: toolbar toggle removes the extra Record click and matches the reference; toolbar popup adds that click; uninvoked first-click floating tabCapture cannot satisfy native Chrome authorization. Use the selected toggle plus functional floating controls. Native acceptance covers toolbar Start, bounded helper auto-close, float Stop/Start, toolbar Stop/restart without another helper, and decoded WebM audio.
+
 ## Final clarified UX — v0.4.2
 
 Tony explicitly selected: icon opens the July control popup shown in his screenshot; popup and floating card both expose actual Start/Stop. This supersedes the v0.4.1 direct toolbar-toggle interpretation. The unwanted large screen was confirmed as microphone.html, so its helper now uses a focused 460×420 Chrome popup window with the same automatic handoff/close. Account/settings remain in the existing popup, with the options link retained for explicit settings use.

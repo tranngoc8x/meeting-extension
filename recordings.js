@@ -1,6 +1,8 @@
 import { createRecordingStore } from './recording-store.js';
 const store = createRecordingStore();
 const $ = selector => document.querySelector(selector);
+const PAGE_SIZE = 20;
+let records = [], currentPage = 1;
 const statuses = { recording: 'Đang ghi âm', 'pending-upload': 'Chờ kết nối upload', interrupted: 'Ghi âm bị gián đoạn' };
 function element(tag, text, className) {
   const node = document.createElement(tag);
@@ -31,11 +33,28 @@ function run(button, operation) {
   Promise.resolve().then(operation).catch(error => { $('#error').textContent = error.message; })
     .finally(() => { button.disabled = false; });
 }
-async function refresh() {
-  const records = await store.list();
-  $('#empty').textContent = records.length ? '' : 'Chưa có bản ghi. Mở Google Meet và bấm “Ghi âm cuộc họp” để bắt đầu.';
+function renderPagination() {
+  const pagination = $('#pagination');
+  pagination.replaceChildren();
+  const pageCount = Math.ceil(records.length / PAGE_SIZE);
+  pagination.hidden = pageCount <= 1;
+  if (pageCount <= 1) return;
+  const previous = element('button', 'Trước');
+  previous.type = 'button';
+  previous.disabled = currentPage === 1;
+  previous.addEventListener('click', () => { currentPage -= 1; renderPage(); });
+  const status = element('span', `Trang ${currentPage} / ${pageCount}`, 'pagination-status');
+  const next = element('button', 'Sau');
+  next.type = 'button';
+  next.disabled = currentPage === pageCount;
+  next.addEventListener('click', () => { currentPage += 1; renderPage(); });
+  pagination.append(previous, status, next);
+}
+function renderPage() {
+  $('#empty').textContent = records.length ? '' : 'Chưa có bản ghi. Mở Google Meet và bấm icon July để bắt đầu.';
   $('#recordings').replaceChildren();
-  for (const record of records) {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  for (const record of records.slice(start, start + PAGE_SIZE)) {
     const card = document.createElement('article');
     card.append(element('h2', record.title || 'Cuộc họp'));
     const seconds = Math.max(0, Math.floor((Date.parse(record.endedAt || new Date().toISOString()) - Date.parse(record.startedAt)) / 1000));
@@ -58,6 +77,12 @@ async function refresh() {
     card.append(actions);
     $('#recordings').append(card);
   }
+  renderPagination();
+}
+async function refresh() {
+  records = await store.list();
+  currentPage = Math.min(currentPage, Math.max(1, Math.ceil(records.length / PAGE_SIZE)));
+  renderPage();
 }
 $('#refresh').addEventListener('click', () => run($('#refresh'), refresh));
 refresh().catch(error => { $('#error').textContent = error.message; $('#empty').textContent = ''; });

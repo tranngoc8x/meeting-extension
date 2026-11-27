@@ -6,36 +6,15 @@ export const backendStatusKey = tabId => `meet-backend:${tabId}`;
 
 export async function getConnection(storage) {
   const saved = (await storage.get(CONNECTION_KEY))[CONNECTION_KEY] ?? {};
-  return { backendUrl: saved.backendUrl || DEFAULT_BACKEND_URL, token: saved.token ?? null, email: saved.email ?? null };
+  return { backendUrl: DEFAULT_BACKEND_URL, token: saved.token ?? null, email: saved.email ?? null };
 }
 
-// Builds before 0.2.0 defaulted to a local backend; that saved value would keep
-// pointing the installed extension at localhost after the switch to the server.
-const LEGACY_LOCAL_BACKENDS = ['http://localhost:4000', 'http://127.0.0.1:4000'];
-
-/** Move a saved legacy local backend to the server; its token belongs to the old backend. */
+/** Move any saved non-July backend to the fixed server; its token belongs to the old backend. */
 export async function migrateLegacyBackend(storage) {
   const saved = (await storage.get(CONNECTION_KEY))[CONNECTION_KEY];
-  if (!saved || !LEGACY_LOCAL_BACKENDS.includes(saved.backendUrl)) return false;
+  if (!saved || saved.backendUrl === DEFAULT_BACKEND_URL) return false;
   await storage.set({ [CONNECTION_KEY]: { backendUrl: DEFAULT_BACKEND_URL } });
   return true;
-}
-
-export function normalizeBackendUrl(value) {
-  let url;
-  try { url = new URL(String(value).trim()); } catch { throw new Error('Địa chỉ backend không hợp lệ'); }
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-    throw new Error('Địa chỉ backend phải là http(s)://host[:port]');
-  }
-  return url.href.replace(/\/$/, '');
-}
-
-/** Changing the backend drops the token: it belongs to the old server. */
-export async function setBackendUrl(storage, value) {
-  const backendUrl = normalizeBackendUrl(value);
-  const current = await getConnection(storage);
-  if (backendUrl !== current.backendUrl) await storage.set({ [CONNECTION_KEY]: { backendUrl } });
-  return backendUrl;
 }
 
 export const GOOGLE_START_PATH = '/oauth/start';

@@ -51,3 +51,11 @@ test('local library downloads persisted bytes safely and does not allow deleting
   await active.waitFor();
   assert.equal(await p.locator('article').count(), 1);
 });
+
+test('recordings page exposes pagination for long local libraries', async () => {
+  const html = await readFile(new URL('../recordings.html', import.meta.url), 'utf8');
+  const js = await readFile(new URL('../recordings.js', import.meta.url), 'utf8');
+  assert.match(html, /id="pagination"/);
+  assert.match(js, /const PAGE_SIZE = 20/);
+  assert.match(js, /Trang \$\{currentPage\} \/ \$\{pageCount\}/);
+});

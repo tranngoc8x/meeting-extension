@@ -124,9 +124,10 @@
 }
 
 body {
-  width: 375px;
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
-  padding: 16px;
+  padding: 32px clamp(20px, 5vw, 72px) 48px;
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.5;
@@ -179,7 +180,9 @@ h1, h2, p {
 .app-container {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 24px;
+  width: min(100%, 1080px);
+  margin: 0 auto;
 }
 
 .app-header {
@@ -187,7 +190,8 @@ h1, h2, p {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 2px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
 }
 
 .brand {
@@ -221,6 +225,14 @@ h1, h2, p {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+
+.page-label {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .brand-name {
@@ -261,10 +273,62 @@ h1, h2, p {
 }
 
 .app-main {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
 }
+
+.hero-card { grid-column: 1; grid-row: 1; }
+.recordings-card { grid-column: 1; grid-row: 2; }
+.account-card { grid-column: 2; grid-row: 1; }
+.schedule-card { grid-column: 2; grid-row: 2; }
+.app-main:not(.signed-in) .recordings-card { grid-column: 1 / -1; }
+
+.recordings-preview { display: grid; gap: 8px; }
+.recording-preview-item { display: grid; gap: 6px; }
+.recording-preview-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.recording-preview-row:hover,
+.recording-preview-row:focus-visible {
+  border-color: var(--brand-primary);
+  outline: none;
+}
+.recording-preview-title {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recording-preview-meta { flex-shrink: 0; color: var(--text-muted); font-size: 11px; }
+.recording-preview-details {
+  padding: 8px 10px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.recording-preview-details p { margin: 0 0 5px; overflow-wrap: anywhere; }
+.recording-preview-details p:last-of-type { margin-bottom: 8px; }
+.recording-preview-details strong { color: var(--text-primary); }
+.recording-preview-download { padding: 6px 10px; font-size: 11px; }
+.recording-preview-error { color: var(--badge-danger-text); }
 
 /* =============================================================================
    Card Component
@@ -553,91 +617,27 @@ h1, h2, p {
   flex-shrink: 0;
 }
 
-/* =============================================================================
-   03 Advanced Settings Collapsible Card
-   ============================================================================= */
-
-.advanced-card {
-  padding: 0;
-  overflow: hidden;
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.advanced-card[open] {
-  box-shadow: var(--shadow-md);
-}
-
-.advanced-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 13px 14px;
-  cursor: pointer;
-  user-select: none;
-  list-style: none;
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  transition: background-color 0.15s ease;
-}
-
-.advanced-card[open] .advanced-summary {
-  border-radius: 12px 12px 0 0;
-}
-
-.advanced-summary::-webkit-details-marker {
-  display: none;
-}
-
-.advanced-summary:hover {
-  background-color: var(--bg-subtle);
-}
-
-.advanced-summary .card-title {
-  margin: 0;
-}
-
-.chevron-icon {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  transition: transform 0.2s ease, color 0.15s ease;
-}
-
-.advanced-summary:hover .chevron-icon {
-  color: var(--text-secondary);
-}
-
-.advanced-card[open] .chevron-icon {
-  transform: rotate(180deg);
-}
-
-.advanced-content {
-  padding: 0 14px 14px;
-  border-top: 1px solid var(--border-light);
-  animation: slide-down 0.2s ease-out;
-}
-
-@keyframes slide-down {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
+@media (max-width: 760px) {
+  body {
+    padding: 24px 16px 36px;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-card,
+  .recordings-card,
+  .account-card,
+  .schedule-card,
+  .app-main:not(.signed-in) .recordings-card {
+    grid-column: 1;
+    grid-row: auto;
   }
 }
 
-.advanced-field {
-  padding-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.advanced-divider {
-  height: 1px;
-  background-color: var(--border-light);
-  margin: 14px 0 12px;
+.schedule-card {
+  padding: 14px;
 }
 
 .schedule-header {

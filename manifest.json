@@ -2,23 +2,24 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA5URJK4nHC9yiMYfHTd/9UThSdXl1IQ5G7ts6o6SURL36g40aXajjm7NkAauYeWp40OC3LbvXXcunTYmM/ZJ8HFo7bQMMtOcxPNUymLUPksV1g9B70WviyrN8ElzCzqgpc3zpGb5MBp90Y1HFwqpsd+uweGVaDzEoN5B/ClMcgKVgPjmcNUFGXhJf612LYE/hCFzA/Yt1ktMC1sk5P6h1VzoVrCLM1CSh/5DdMMpRDPJ1wo7X/YF2wqOxe+X0wN1XnbfitIsf+96V7Tj2TX2TPrDlLSkLbcZJJREZCXZMbwheWpmgGJUo8SOKVTJDOiijwu7gWT4zuvGsfmWb0G0e9QIDAQAB",
   "name": "July Meeting Bot",
-  "version": "0.4.2",
-  "description": "Records Google Meet audio from July popup and meeting controls, with automatic meeting bot dispatch.",
+  "version": "0.4.3",
+  "description": "Records Google Meet audio with one toolbar click, floating meeting controls, and Calendar reminders.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
     "identity",
     "activeTab",
     "tabCapture",
-    "offscreen"
+    "offscreen",
+    "alarms",
+    "notifications"
   ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "July Meeting Bot",
-    "default_popup": "popup.html",
+    "default_title": "July · Ghi / Dừng ghi âm",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

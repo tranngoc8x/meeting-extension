@@ -12,7 +12,7 @@ function canonicalRoom(value) {
   } catch { return null; }
 }
 function invocationRequired() {
-  return Object.assign(Error('Bấm icon July một lần để cấp quyền thu âm cho tab này.'), { needsInvocation: true });
+  return Object.assign(Error('Bấm icon July để ghi âm lần đầu trên tab này. Sau đó có thể ghi/dừng ngay tại card.'), { needsInvocation: true });
 }
 
 export function createRecordingController(chrome, { interruptTab = async () => {} } = {}) {

@@ -36,7 +36,7 @@
       <section class="panel" aria-label="July ghi âm cuộc họp">
         <header><span>July · Ghi âm</span><button class="quiet collapse" type="button" aria-label="Thu gọn">−</button></header>
         <button class="primary" type="button" disabled><span class="dot" aria-hidden="true"></span><span class="label">Ghi âm</span></button>
-        <p class="help"><span class="shortcut"></span> Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
+        <p class="help">Tab mới: bấm icon July để ghi lần đầu, sau đó có thể ghi/dừng tại đây. <span class="shortcut"></span> Micro được thu riêng, kể cả khi tắt mic trên Meet.</p>
         <p class="status" role="status">Vào cuộc họp để bắt đầu ghi âm</p>
         <p class="error" role="alert"></p>
         <footer><span class="timer">00:00</span><button class="quiet files" type="button">Bản ghi trên máy</button><button class="quiet settings" type="button" aria-label="Cài đặt July">Cài đặt</button></footer>
@@ -57,7 +57,7 @@
         starting: 'Đang bắt đầu ghi âm…', recording: 'Đang ghi âm · Tiếng tab + micro',
         saving: 'Đang lưu bản ghi trên máy…', saved: 'Đã lưu trên máy · Chờ kết nối upload',
         'waiting-microphone': 'Đang chờ quyền micro · Sẽ tự bắt đầu ghi âm sau khi cho phép',
-        error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : state.needsInvocation ? 'Cần cấp quyền thu âm cho tab này một lần' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
+        error: captureActive ? 'Nguồn thu có thể còn hoạt động · Bấm Dừng để thử lại' : state.needsInvocation ? 'Bấm icon July để ghi lần đầu trên tab này' : 'Ghi âm chưa hoàn tất · Kiểm tra bản ghi trên máy',
       })[state.status] || (meeting.inCall ? 'Sẵn sàng ghi âm' : 'Vào cuộc họp để bắt đầu ghi âm');
       $('.primary').title = state.status === 'recording' ? 'Dừng và lưu bản ghi' : label;
     }

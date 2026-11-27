@@ -5,10 +5,10 @@ test('MV3 manifest is Meet-only, minimal permission, all entry points exist', as
  const root = new URL('../', import.meta.url);
  const m = JSON.parse(await readFile(new URL('manifest.json',root)));
  assert.equal(m.manifest_version,3);
- assert.equal(m.action.default_popup,'popup.html','toolbar icon opens the July control popup');
+ assert.equal(m.action.default_popup,undefined,'toolbar icon directly records without a popup step');
  assert.equal(m.options_ui.page,'popup.html');
  assert.equal(m.options_ui.open_in_tab,true);
- assert.deepEqual(m.permissions,['storage','identity','activeTab','tabCapture','offscreen']);
+ assert.deepEqual(m.permissions,['storage','identity','activeTab','tabCapture','offscreen','alarms','notifications']);
  assert.ok(Number(m.minimum_chrome_version) >= 116);
  assert.equal(m.content_scripts[0].js.includes('recorder.js'),false);
  assert.equal(m.commands['record-meeting'].suggested_key.default,'Alt+Shift+R');
@@ -16,5 +16,5 @@ test('MV3 manifest is Meet-only, minimal permission, all entry points exist', as
  assert.deepEqual(m.content_scripts[0].matches,['https://meet.google.com/*']);
  assert.equal(m.content_scripts[0].all_frames,false);
  assert.equal(m.background.type,'module');
- for(const path of [...m.content_scripts[0].js,m.background.service_worker,m.action.default_popup,m.options_ui.page,'offscreen.html','offscreen.js','microphone.html','microphone.js']) await access(new URL(path,root));
+ for(const path of [...m.content_scripts[0].js,m.background.service_worker,m.options_ui.page,'offscreen.html','offscreen.js','microphone.html','microphone.js']) await access(new URL(path,root));
 });
