@@ -1,12 +1,14 @@
 :root{color-scheme:light dark;font:15px/1.6 system-ui,-apple-system,sans-serif;color:#1f2937;background:#f4f5f8}
 *{box-sizing:border-box}body{margin:0}main{max-width:850px;padding:40px 24px;margin:auto}
 header{display:flex;justify-content:space-between;align-items:center;gap:20px}h1{margin:0;font-size:28px;letter-spacing:-.6px}
+.header-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+select{font:inherit;font-size:13px;padding:7px 10px;background:white;color:inherit;border:1px solid #cdd3df;border-radius:8px;cursor:pointer}
 .eyebrow{color:#b8233c;font-size:11px;letter-spacing:2px;font-weight:750;margin:0 0 4px}.intro{color:#606c80;margin:20px 0 28px}
 article{background:white;border:1px solid #e0e4ec;padding:22px;border-radius:14px;margin-bottom:14px}h2{font-size:17px;margin:0;overflow-wrap:anywhere}
 .meta,.room{font-size:13px;color:#606c80;margin:6px 0;overflow-wrap:anywhere}.status{display:inline-block;font-size:12px;border-radius:6px;background:#f1f3fa;color:#364d7c;padding:3px 9px;margin:8px 0}
 .warning{font-size:13px;color:#9c4523;margin:8px 0}.actions{display:flex;gap:10px;margin-top:14px}button{font:inherit;font-size:13px;padding:8px 14px;background:white;color:inherit;border:1px solid #cdd3df;border-radius:8px;cursor:pointer}
 button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #849bff;outline-offset:2px}.download{color:white;background:#b8233c;border-color:#b8233c}#error{color:#b8233c}#error:empty{display:none}
 #pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin:22px 0 8px}.pagination-status{font-size:13px;color:#606c80}
-@media(prefers-color-scheme:dark){:root{color:#e8edf5;background:#15191f}article,button{background:#222730;border-color:#3c4452}.download{background:#b8233c}.intro,.meta,.room{color:#b4bfd0}.status{background:#2b364c;color:#c7d8ff}.warning{color:#ffc49c}#error{color:#ffacb9}}
+@media(prefers-color-scheme:dark){:root{color:#e8edf5;background:#15191f}article,button,select{background:#222730;border-color:#3c4452}.download{background:#b8233c}.intro,.meta,.room{color:#b4bfd0}.status{background:#2b364c;color:#c7d8ff}.warning{color:#ffc49c}#error{color:#ffacb9}}
 @media(max-width:500px){main{padding:24px 14px}h1{font-size:23px}article{padding:16px}}
 .microphone-setup main{max-width:460px;padding:24px}.microphone-setup h1{font-size:22px;letter-spacing:-.3px}.microphone-setup .intro{font-size:13px;margin:12px 0}

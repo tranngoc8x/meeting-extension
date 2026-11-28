@@ -1,3 +1,5 @@
+import { DEFAULT_LANGUAGE, getMessages } from './i18n.js';
+
 export const REMINDER_ALARM = 'calendar-reminders';
 export const REMINDER_MINUTES_KEY = 'calendarReminderMinutes';
 export const REMINDER_STATUS_KEY = 'calendarReminderStatus';
@@ -33,12 +35,12 @@ function isDue(meeting, nowMs, reminderMinutes) {
   return elapsed >= 0 && elapsed < ALARM_TOLERANCE_MS && startMs > nowMs;
 }
 
-function notificationOptions(meeting, reminderMinutes) {
-  const title = meeting.title || 'Cuộc họp sắp bắt đầu';
+function notificationOptions(meeting, reminderMinutes, msg) {
+  const title = meeting.title || msg.reminderDefaultMeeting;
   return {
     type: 'basic',
-    title: 'July · Nhắc lịch họp',
-    message: `${title} sẽ bắt đầu sau ${reminderMinutes} phút.`,
+    title: msg.reminderTitle,
+    message: msg.reminderBody(title, reminderMinutes),
     contextMessage: meeting.meetCode ? 'Google Meet' : 'Google Calendar',
     iconUrl: 'icons/icon128.png',
     priority: 2,
@@ -46,7 +48,8 @@ function notificationOptions(meeting, reminderMinutes) {
   };
 }
 
-export async function syncCalendarReminders({ storage, apiFn, notifications, now = new Date(), reminderMinutes } = {}) {
+export async function syncCalendarReminders({ storage, apiFn, notifications, now = new Date(), reminderMinutes, language = DEFAULT_LANGUAGE } = {}) {
+  const msg = getMessages(language);
   if (!storage || typeof apiFn !== 'function' || !notifications?.create) return { notified: 0 };
   const configured = reminderMinutes ?? (await storage.get(REMINDER_MINUTES_KEY))[REMINDER_MINUTES_KEY];
   const minutes = normalizeReminderMinutes(configured);
@@ -64,7 +67,7 @@ export async function syncCalendarReminders({ storage, apiFn, notifications, now
     const id = `july-calendar-${meeting.id}`;
     await storage.set({ [reminderKey(meeting)]: meeting.startAt });
     try {
-      await notifications.create(id, notificationOptions(meeting, minutes));
+      await notifications.create(id, notificationOptions(meeting, minutes, msg));
     } catch (error) {
       await storage.remove([reminderKey(meeting)]);
       throw error;

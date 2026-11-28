@@ -57,5 +57,5 @@ test('recordings page exposes pagination for long local libraries', async () => 
   const js = await readFile(new URL('../recordings.js', import.meta.url), 'utf8');
   assert.match(html, /id="pagination"/);
   assert.match(js, /const PAGE_SIZE = 20/);
-  assert.match(js, /Trang \$\{currentPage\} \/ \$\{pageCount\}/);
+  assert.match(js, /msg\.pageOf\(currentPage, pageCount\)/);
 });

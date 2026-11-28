@@ -1,0 +1,1 @@
+- Khi người dùng chỉ tài liệu bằng đường dẫn tương đối, kiểm tra cả workspace tạm được nêu hoặc hỏi lại trước khi kết luận tài liệu không tồn tại.

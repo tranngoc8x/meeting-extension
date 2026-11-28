@@ -5,7 +5,7 @@ const ACTIVE = new Set(['starting', 'recording', 'saving']);
 const TYPES = new Set(['recording.offscreen.start', 'recording.offscreen.stop', 'recording.offscreen.status', 'recording.offscreen.permissions', 'recording.offscreen.microphone-muted']);
 
 /** Owns capture and persistence independently of the service worker's lifetime. */
-export function createOffscreenRecorder({ chrome, store, recorderFactory, permissions = navigator.permissions }) {
+export function createOffscreenRecorder({ chrome, store, recorderFactory, permissions = navigator.permissions, notifyRecordingFinished }) {
   let metadata = null, starting = false, canceled = false, overrideState = null;
   const snapshot = () => ({
     ok: true,
@@ -40,6 +40,10 @@ export function createOffscreenRecorder({ chrome, store, recorderFactory, permis
           status: message.error ? 'interrupted' : 'pending-upload',
           ...(message.error ? { error: message.error } : {}),
         });
+        if (!message.error) {
+          const notify = notifyRecordingFinished || (value => chrome.runtime.sendMessage({ target: 'background', type: 'recording.completed', id: value }));
+          Promise.resolve(notify(message.id)).catch(() => {});
+        }
       } else throw Error('Unknown recording storage operation');
       return { ok: true };
     },

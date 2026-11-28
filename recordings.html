@@ -8,10 +8,19 @@
 </head>
 <body>
   <main>
-    <header><div><p class="eyebrow">JULY MEETING</p><h1>Bản ghi trên máy</h1></div><button id="refresh" type="button">Làm mới</button></header>
-    <p class="intro">Bản ghi được giữ cục bộ trong trình duyệt này. Bạn có thể tải file về máy.</p>
+    <header>
+      <div><p class="eyebrow">JULY MEETING</p><h1 data-i18n="recordingsTitle">Bản ghi trên máy</h1></div>
+      <div class="header-actions">
+        <select id="lang-select" aria-label="Ngôn ngữ">
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+        </select>
+        <button id="refresh" type="button" data-i18n="refreshBtn">Làm mới</button>
+      </div>
+    </header>
+    <p class="intro" data-i18n="recordingsIntro">Bản ghi được giữ cục bộ trong trình duyệt này. Bạn có thể tải file về máy.</p>
     <p id="error" role="alert"></p>
-    <p id="empty" role="status">Đang tải bản ghi…</p>
+    <p id="empty" role="status" data-i18n="recordingsLoading">Đang tải bản ghi…</p>
     <section id="recordings" aria-label="Danh sách bản ghi"></section>
     <nav id="pagination" aria-label="Phân trang bản ghi" hidden></nav>
   </main>

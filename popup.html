@@ -16,11 +16,18 @@
         </div>
         <div class="brand-info">
           <h1 class="brand-name">July Meeting Bot</h1>
-          <p class="page-label">Cài đặt extension</p>
+          <p data-i18n="pageLabel" class="page-label">Cài đặt extension</p>
           <p id="today" class="dateline"></p>
         </div>
       </div>
-      <span id="conn-badge" class="badge">…</span>
+      <div class="header-actions">
+        <label class="sr-only" for="lang-select" data-i18n="langLabel">Ngôn ngữ</label>
+        <select id="lang-select" class="lang-select" aria-label="Ngôn ngữ">
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+        </select>
+        <span id="conn-badge" class="badge">…</span>
+      </div>
     </header>
 
     <main id="app-main" class="app-main">
@@ -32,7 +39,7 @@
               <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/>
               <rect x="2" y="6" width="14" height="12" rx="3"/>
             </svg>
-            <h2 id="tab-title" class="card-title">Phòng họp</h2>
+            <h2 id="tab-title" class="card-title" data-i18n="roomTitle">Phòng họp</h2>
           </div>
           <button id="refresh" class="icon-btn" type="button" title="Làm mới trạng thái" aria-label="Làm mới">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -47,7 +54,7 @@
           <div class="meeting-status-row">
             <span id="state-dot" class="dot" aria-hidden="true"></span>
             <div class="meeting-details">
-              <p id="state" class="meeting-state-text" role="status" aria-live="polite">Đang kiểm tra…</p>
+              <p id="state" class="meeting-state-text" role="status" aria-live="polite" data-i18n="checking">Đang kiểm tra…</p>
               <p id="room" class="room-chip mono"></p>
             </div>
           </div>
@@ -62,11 +69,11 @@
               <path d="M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>
               <path d="M8 7h8M8 11h8M8 15h5"/>
             </svg>
-            <h2 id="recordings-title" class="card-title">Bản ghi trên máy</h2>
+            <h2 id="recordings-title" class="card-title" data-i18n="recordingsTitle">Bản ghi trên máy</h2>
           </div>
-          <button id="open-recordings" class="btn-disconnect" type="button">Mở danh sách</button>
+          <button id="open-recordings" class="btn-disconnect" type="button" data-i18n="openRecordings">Mở danh sách</button>
         </div>
-        <p id="recordings-empty" class="section-desc" role="status">Đang tải bản ghi…</p>
+        <p id="recordings-empty" class="section-desc" role="status" data-i18n="recordingsLoading">Đang tải bản ghi…</p>
         <div id="recordings-preview" class="recordings-preview" aria-label="Bản ghi gần đây"></div>
       </section>
 
@@ -78,12 +85,12 @@
               <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
               <circle cx="12" cy="7" r="4"/>
             </svg>
-            <h2 id="conn-title" class="card-title">Tài khoản</h2>
+            <h2 id="conn-title" class="card-title" data-i18n="accountTitle">Tài khoản</h2>
           </div>
         </div>
 
         <div id="conn-off" class="account-off">
-          <p class="section-desc">Đăng nhập để bật lịch quét tự động.</p>
+          <p class="section-desc" data-i18n="accountDesc">Đăng nhập để bật lịch quét tự động.</p>
           <button id="connect" class="btn btn-google" type="button">
             <svg class="google-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
               <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/>
@@ -91,9 +98,9 @@
               <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15Z"/>
               <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"/>
             </svg>
-            <span>Kết nối Google</span>
+            <span data-i18n="connectGoogle">Kết nối Google</span>
           </button>
-          <button id="connect-dashboard" class="btn btn-google" type="button">Kết nối bằng tài khoản dashboard</button>
+          <button id="connect-dashboard" class="btn btn-google" type="button" data-i18n="connectDashboard">Kết nối bằng tài khoản dashboard</button>
         </div>
 
         <div id="conn-on" class="account-on" hidden>
@@ -101,11 +108,11 @@
             <span id="avatar" class="avatar" aria-hidden="true"></span>
             <div class="who">
               <span id="conn-email" class="email"></span>
-              <span class="user-meta">Đang theo dõi lịch họp</span>
+              <span class="user-meta" data-i18n="trackingCalendar">Đang theo dõi lịch họp</span>
             </div>
           </div>
-          <button id="open-dashboard" class="btn-disconnect" type="button">Mở dashboard</button>
-          <button id="disconnect" class="btn-disconnect" type="button">Ngắt kết nối</button>
+          <button id="open-dashboard" class="btn-disconnect" type="button" data-i18n="openDashboard">Mở dashboard</button>
+          <button id="disconnect" class="btn-disconnect" type="button" data-i18n="disconnect">Ngắt kết nối</button>
         </div>
 
         <p id="conn-state" class="sr-only" role="status" aria-live="polite"></p>
@@ -121,50 +128,65 @@
                   <circle cx="12" cy="12" r="10"/>
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
-                <h3 id="schedule-title" class="subcard-title">Lịch quét tự động</h3>
+                <h3 id="schedule-title" class="subcard-title" data-i18n="scheduleTitle">Lịch quét tự động</h3>
               </div>
-              <span class="cadence-tag">Mỗi 10 phút</span>
+              <span class="cadence-tag" data-i18n="cadenceTag">Mỗi 10 phút</span>
             </div>
 
             <div class="times-grid">
               <div class="time-field">
-                <label class="field-label" for="start">Bắt đầu</label>
+                <label class="field-label" for="start" data-i18n="startLabel">Bắt đầu</label>
                 <input id="start" class="time-input" name="start" type="time" required>
               </div>
               <span class="time-separator" aria-hidden="true">→</span>
               <div class="time-field">
-                <label class="field-label" for="end">Kết thúc</label>
+                <label class="field-label" for="end" data-i18n="endLabel">Kết thúc</label>
                 <input id="end" class="time-input" name="end" type="time" required>
               </div>
             </div>
 
             <div class="days-container">
-              <p class="field-label" aria-hidden="true">Ngày trong tuần</p>
+              <p class="field-label" aria-hidden="true" data-i18n="daysLabel">Ngày trong tuần</p>
               <fieldset id="days" class="days-group">
-                <legend class="sr-only">Ngày trong tuần</legend>
+                <legend class="sr-only" data-i18n="daysLabel">Ngày trong tuần</legend>
               </fieldset>
             </div>
 
-            <div class="time-field reminder-field">
-              <label class="field-label" for="reminder-minutes">Nhắc trước</label>
-              <select id="reminder-minutes" class="time-input" name="reminderMinutes">
-                <option value="1">1 phút</option>
-                <option value="2">2 phút</option>
-                <option value="3">3 phút</option>
-                <option value="4">4 phút</option>
-                <option value="5" selected>5 phút</option>
-                <option value="6">6 phút</option>
-                <option value="7">7 phút</option>
-                <option value="8">8 phút</option>
-                <option value="9">9 phút</option>
-                <option value="10">10 phút</option>
-              </select>
+            <div class="schedule-options">
+              <div class="setting-row reminder-field">
+                <div class="setting-row-text">
+                  <label class="field-label" for="reminder-minutes" data-i18n="reminderLabel">Nhắc trước</label>
+                </div>
+                <select id="reminder-minutes" class="time-input setting-select" name="reminderMinutes">
+                  <option value="1">1 phút</option>
+                  <option value="2">2 phút</option>
+                  <option value="3">3 phút</option>
+                  <option value="4">4 phút</option>
+                  <option value="5" selected>5 phút</option>
+                  <option value="6">6 phút</option>
+                  <option value="7">7 phút</option>
+                  <option value="8">8 phút</option>
+                  <option value="9">9 phút</option>
+                  <option value="10">10 phút</option>
+                </select>
+              </div>
+
+              <div class="setting-row upload-duration-field">
+                <div class="setting-row-text">
+                  <label class="field-label" for="recording-upload-minutes" data-i18n="uploadDurationLabel">Gửi bản ghi với các cuộc họp có độ dài</label>
+                  <p id="recording-upload-hint" class="field-hint" data-i18n="uploadDurationHint">0 = gửi mọi bản ghi</p>
+                </div>
+                <div class="upload-duration-control">
+                  <input id="recording-upload-minutes" class="time-input upload-duration-input" name="recordingUploadMinutes" type="number" min="0" step="1" inputmode="numeric" aria-describedby="recording-upload-hint">
+                  <span class="upload-duration-unit" aria-hidden="true" data-i18n="minutesUnit">phút</span>
+                </div>
+              </div>
             </div>
 
             <div class="card-footer">
               <span id="schedule-status" class="schedule-status" role="status" aria-live="polite"></span>
               <button class="btn btn-save" type="submit">
-                <span>Lưu thay đổi</span>
+                <span data-i18n="saveChanges">Lưu thay đổi</span>
               </button>
             </div>
           </form>

@@ -36,6 +36,8 @@ test('popup.html contains all required functional DOM IDs for popup.js', () => {
     'end',
     'days',
     'reminder-minutes',
+    'recording-upload-minutes',
+    'lang-select',
     'schedule-status'
   ];
 
@@ -75,6 +77,8 @@ test('schedule form inputs have correct name attributes and required tags', () =
   assert.ok(html.includes('name="end"'), 'End time input must have name="end"');
   assert.ok(html.includes('name="reminderMinutes"'), 'Reminder input must have name="reminderMinutes"');
   assert.match(html, /id="reminder-minutes"[\s\S]*option value="10"/);
+  assert.match(html, /Gửi bản ghi với các cuộc họp có độ dài/);
+  assert.match(html, /id="recording-upload-minutes"/);
 });
 
 test('local recordings preview is limited to six expandable items with download action', () => {

@@ -107,6 +107,16 @@ export function createRecordingStore(indexedDB = globalThis.indexedDB) {
       return transaction(['recordings'], 'readonly', tx => requestResult(tx.objectStore('recordings').get(id)));
     },
 
+    async update(id, patch) {
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('Invalid recording update');
+      return transaction(['recordings'], 'readwrite', async tx => {
+        const record = await requireRecord(tx, id);
+        const updated = { ...record, ...patch };
+        tx.objectStore('recordings').put(updated);
+        return updated;
+      });
+    },
+
     async list() {
       return transaction(['recordings'], 'readonly', async tx => {
         const records = await requestResult(tx.objectStore('recordings').getAll());

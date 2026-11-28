@@ -177,9 +177,11 @@ Google Meet liên tục cập nhật giao diện mà không có API công khai c
 
 Micro được thu riêng và **tôn trọng nút mute của Meet**. Để kết thúc thu micro, bấm Dừng ghi âm.
 
+Trong phần Cài đặt sau khi đăng nhập, cấu hình **Gửi bản ghi với các cuộc họp có độ dài xx phút**. Mặc định là 3 phút; giá trị `0` sẽ gửi mọi bản ghi, còn giá trị lớn hơn chỉ gửi các cuộc họp đạt đủ số phút. Bản ghi ngắn hơn ngưỡng vẫn được giữ trên máy.
+
 Bộ ghi nằm trong offscreen document của extension, tiếp tục hoạt động khi popup đóng hoặc service worker khởi động lại. Mỗi lần chỉ ghi một tab. Reload/đóng/chuyển trang Meet sẽ yêu cầu bộ ghi dừng và lưu; nếu trình duyệt bị ngắt đột ngột, các đoạn đã xác nhận vẫn được giữ nhưng phần đuôi có thể mất và file được đánh dấu gián đoạn. Bản ghi cũ từ v0.3.0 vẫn đọc/tải được. File local thuộc profile trình duyệt này, không đồng bộ qua tài khoản; gỡ extension hoặc xóa dữ liệu extension sẽ mất các file đó.
 
-**Upload đang chờ contract API signed R2** (Bead `meet-ext-736`). Bản ghi hoàn tất được giữ cục bộ trong trình duyệt và chưa gửi lên server nào. `signed-upload.js` đã có primitive PUT bằng signed HTTPS URL, không mang cookie/token backend và không theo redirect. Endpoint xin URL, payload, quyền host/CORS, giới hạn file và bước xác nhận hoàn tất sẽ được nối khi có contract; không sử dụng gateway của extension mẫu.
+**Upload signed R2 khi đã đăng nhập** (Bead `meet-ext-736`). Sau khi lưu xong, extension dùng token đang đăng nhập để tạo recording session, xin signed PUT URL, gửi file `audio/webm` trực tiếp lên R2 rồi gọi `finish`. Bearer token chỉ đi tới API metadata; signed PUT giữ nguyên header server cấp, không gửi cookie/token và không theo redirect. Khi chưa đăng nhập hoặc upload lỗi, file vẫn nằm cục bộ và được thử lại khi service worker khởi động lại. Trạng thái gửi/đang xử lý/lỗi hiển thị trong thư viện bản ghi.
 
 ---
 

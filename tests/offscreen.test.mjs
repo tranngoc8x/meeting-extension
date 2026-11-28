@@ -33,12 +33,13 @@ function fixture({ held = false, permission = 'granted', heldPermission = false,
       },
     };
   };
-  const router = createOffscreenRecorder({ chrome, store, recorderFactory, permissions: { async query() {
+  const completed = [];
+  const router = createOffscreenRecorder({ chrome, store, recorderFactory, notifyRecordingFinished: id => completed.push(id), permissions: { async query() {
     if (permissionError) throw Error('Permission query failed');
     if (heldPermission) await new Promise(resolve => { releasePermission = resolve; });
     return { state: permission };
   } } });
-  return { router, records, chunks, broadcasts, starts: () => starts, release: () => release(), releasePermission: () => releasePermission() };
+  return { router, records, chunks, broadcasts, completed, starts: () => starts, release: () => release(), releasePermission: () => releasePermission() };
 }
 const message = (type, extra) => ({ target: 'offscreen', type: `recording.offscreen.${type}`, ...extra });
 
@@ -54,6 +55,7 @@ test('offscreen persists chunks in extension storage and retains identity/state 
   assert.equal(f.records.get('record-1').documentId, null);
   assert.equal(f.records.get('record-1').status, 'pending-upload');
   assert.equal(await f.chunks[0].blob.text(), 'abc');
+  assert.deepEqual(f.completed, ['record-1']);
   assert.ok(f.broadcasts.every(m => m.target === 'background' && m.type === 'recording.state' && m.captureId === 'capture-1'));
 });
 

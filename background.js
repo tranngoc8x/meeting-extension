@@ -5,6 +5,9 @@ import { loadSchedule } from './schedule.js';
 import { createRecordingStore } from './recording-store.js';
 import { createRecordingService, RECORDING_MESSAGES } from './recording-service.js';
 import { createRecordingController } from './recording-controller.js';
+import { createRecordingUploader } from './recording-upload.js';
+import { loadUploadMinutes } from './recording-upload-settings.js';
+import { getMessages, loadLanguage } from './i18n.js';
 // Serialize storage read/modify/write.
 let queue = Promise.resolve();
 function enqueue(operation) {
@@ -28,13 +31,16 @@ export async function pollCalendarReminders() {
   try { permission = await notifications.getPermissionLevel?.(); } catch { /* best effort */ }
   if (permission === 'denied') { await saveStatus({ ok: false, code: 'notifications_denied', message: 'Thông báo của Chrome đang bị chặn cho July.' }); return; }
   const { token } = await getConnection(chrome.storage.local);
-  if (!token) { await saveStatus({ ok: false, code: 'not_connected', message: 'Chưa đăng nhập July.' }); return; }
+  const lang = await loadLanguage(chrome.storage.sync);
+  const msg = getMessages(lang);
+  if (!token) { await saveStatus({ ok: false, code: 'not_connected', message: msg.reminderNotConnected }); return; }
   const reminderMinutes = (await chrome.storage.sync.get('calendarReminderMinutes')).calendarReminderMinutes;
   let result;
   try {
     result = await syncCalendarReminders({
       storage: chrome.storage.local,
       reminderMinutes,
+      language: lang,
       apiFn: () => api(chrome.storage.local, 'GET', '/api/meetings'),
       notifications: {
         create: async (id, options) => {
@@ -153,6 +159,12 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   return true;
 });
 const recordingStore = createRecordingStore();
+const recordingUploader = createRecordingUploader({
+  store: recordingStore,
+  connectionFn: () => getConnection(chrome.storage.local),
+  getUploadMinutes: () => loadUploadMinutes(chrome.storage.sync),
+  apiFn: (method, path, body) => api(chrome.storage.local, method, path, body),
+});
 const recordingController = createRecordingController(chrome, { interruptTab: tabId => recordingStore.interruptTab(tabId) });
 const recordingMessage = createRecordingService({
   controller: recordingController,
@@ -163,12 +175,13 @@ const recordingMessage = createRecordingService({
 });
 function updateRecordingIndicator(result = {}) {
   const status = result.state?.status || (result.active ? 'recording' : 'idle');
-  const indicator = status === 'recording' ? { text: '●', color: '#d93025', title: 'July · Đang ghi âm' }
-    : ['starting', 'waiting-microphone', 'saving'].includes(status) ? { text: '…', color: '#f9ab00', title: 'July · Đang xử lý ghi âm' }
-      : status === 'error' ? { text: '!', color: '#c5221f', title: 'July · Ghi âm gặp lỗi' }
-        : { text: '', color: '#5f6368', title: 'July · Sẵn sàng ghi âm' };
   (async () => {
     try {
+      const msg = getMessages(await loadLanguage(chrome.storage?.sync));
+      const indicator = status === 'recording' ? { text: '●', color: '#d93025', title: msg.actionRecording }
+        : ['starting', 'waiting-microphone', 'saving'].includes(status) ? { text: '…', color: '#f9ab00', title: msg.actionBusy }
+          : status === 'error' ? { text: '!', color: '#c5221f', title: msg.actionError }
+            : { text: '', color: '#5f6368', title: msg.actionIdle };
       await chrome.action.setBadgeText?.({ text: indicator.text });
       await chrome.action.setBadgeBackgroundColor?.({ color: indicator.color });
       await chrome.action.setTitle?.({ title: indicator.title });
@@ -185,6 +198,15 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
     updateRecordingIndicator({ state: { status: 'error' } });
     respond({ ok: false, error: error.message, ...(error.needsMicrophone ? { needsMicrophone: true } : {}), ...(error.needsInvocation ? { needsInvocation: true } : {}) });
   });
+  return true;
+});
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (message?.type !== 'recording.completed') return;
+  if (sender.id !== chrome.runtime.id || sender.tab || !sender.url?.startsWith(chrome.runtime.getURL(''))) {
+    respond({ ok: false, error: 'Untrusted sender' });
+    return;
+  }
+  recordingUploader.upload(message.id).then(() => respond({ ok: true }), error => respond({ ok: false, error: error.message }));
   return true;
 });
 chrome.tabs.onRemoved.addListener(tabId => {
@@ -218,5 +240,6 @@ chrome.runtime.onStartup.addListener(() => {
     const data = await chrome.storage.local.get(null);
     await chrome.storage.local.remove(Object.keys(data).filter(k => k.startsWith('meet-detection:') || k.startsWith('meet-backend:')));
     if (!(await recordingController.status()).active) await recordingStore.recover();
+    await recordingUploader.uploadPending();
   }).catch(() => {});
 });

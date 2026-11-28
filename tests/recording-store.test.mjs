@@ -28,6 +28,7 @@ test('saved chunks survive store reopening and are assembled in order with final
     await store.append(record.id, 0, new Blob(['first']));
     await store.append(record.id, 1, new Blob(['second']));
     await store.finish(record.id, { status: 'pending-upload', endedAt: '2026-11-26T10:02:00.000Z' });
+    await store.update(record.id, { uploadState: 'queued', remoteId: 'remote-1' });
     const reopened = createRecordingStore();
     const blob = await reopened.getBlob(record.id);
     return { text: await blob.text(), type: blob.type, metadata: await reopened.get(record.id), listed: await reopened.list() };
@@ -40,6 +41,8 @@ test('saved chunks survive store reopening and are assembled in order with final
   assert.equal(result.metadata.title, 'Daily meeting');
   assert.equal(result.metadata.documentId, 'doc-one');
   assert.equal(result.metadata.endedAt, '2026-11-26T10:02:00.000Z');
+  assert.equal(result.metadata.uploadState, 'queued');
+  assert.equal(result.metadata.remoteId, 'remote-1');
   assert.deepEqual(result.listed, [result.metadata]);
 });
 
